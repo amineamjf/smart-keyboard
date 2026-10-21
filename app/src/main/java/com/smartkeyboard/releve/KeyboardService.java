@@ -11,6 +11,7 @@ import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.LinearLayout;
+import android.widget.Toast;
 
 public class KeyboardService extends InputMethodService {
 
@@ -40,6 +41,20 @@ public class KeyboardService extends InputMethodService {
 
         LinearLayout right = new LinearLayout(this);
         right.setOrientation(LinearLayout.VERTICAL);
+
+        Button search = new Button(this);
+        search.setText("Recherche");
+        search.setTextSize(12);
+        search.setOnClickListener(v -> {
+            if (ScanService.instance == null) {
+                Toast.makeText(this, "Service Releve Scan inactif", Toast.LENGTH_SHORT).show();
+            } else {
+                ScanService.instance.goSearch();
+            }
+        });
+        right.addView(search, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, (int) (128 * d)));
+
         Button abc = new Button(this);
         abc.setText("ABC");
         abc.setOnClickListener(v -> {
@@ -48,7 +63,7 @@ public class KeyboardService extends InputMethodService {
             imm.showInputMethodPicker();
         });
         right.addView(abc, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, (int) (64 * d)));
+                ViewGroup.LayoutParams.MATCH_PARENT, (int) (128 * d)));
 
         root.addView(left, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 3f));
         root.addView(right, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
