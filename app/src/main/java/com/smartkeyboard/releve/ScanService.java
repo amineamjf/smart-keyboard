@@ -12,33 +12,53 @@ public class ScanService extends AccessibilityService {
 
     public static final ArrayList<String> DUMPS = new ArrayList<>();
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private boolean pending = false;
+    private String lastPkg = "";
     private String last = "";
 
     private final Runnable capture = new Runnable() {
         @Override
         public void run() {
+            pending = false;
             AccessibilityNodeInfo root = getRootInActiveWindow();
-            if (root == null) return;
+            if (root == null) {
+                add("ROOT NULL pkg=" + lastPkg);
+                return;
+            }
             String pkg = String.valueOf(root.getPackageName());
-            if (pkg.equals(getPackageName())) return;
-            if (pkg.equals("com.android.systemui")) return;
+            if (skip(pkg)) return;
             StringBuilder sb = new StringBuilder();
             sb.append("PKG ").append(pkg).append("\n");
             dump(root, 0, sb);
-            String s = sb.toString();
-            if (s.equals(last)) return;
-            last = s;
-            synchronized (DUMPS) {
-                DUMPS.add("=== ecran ===\n" + s);
-                while (DUMPS.size() > 8) DUMPS.remove(0);
-            }
+            add(sb.toString());
         }
     };
 
+    private boolean skip(String p) {
+        return p.equals(getPackageName())
+                || p.equals("com.android.systemui")
+                || p.equals("com.anthropic.claude")
+                || p.contains("launcher");
+    }
+
+    private void add(String s) {
+        if (s.equals(last)) return;
+        last = s;
+        synchronized (DUMPS) {
+            DUMPS.add("=== ecran ===\n" + s);
+            while (DUMPS.size() > 12) DUMPS.remove(0);
+        }
+    }
+
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
-        handler.removeCallbacks(capture);
-        handler.postDelayed(capture, 800);
+        CharSequence p = event.getPackageName();
+        if (p != null) lastPkg = p.toString();
+        if (skip(lastPkg)) return;
+        if (!pending) {
+            pending = true;
+            handler.postDelayed(capture, 800);
+        }
     }
 
     @Override
