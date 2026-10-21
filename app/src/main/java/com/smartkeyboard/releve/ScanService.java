@@ -16,7 +16,6 @@ public class ScanService extends AccessibilityService {
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private boolean pending = false;
-    private String lastPkg = "";
     private String last = "";
     private int steps = 0;
     private int backs = 0;
@@ -33,9 +32,29 @@ public class ScanService extends AccessibilityService {
         return super.onUnbind(intent);
     }
 
+    private void add(String s, boolean isLog) {
+        synchronized (DUMPS) {
+            DUMPS.add(s);
+            int count = 0;
+            int max = isLog ? 25 : 3;
+            for (int i = DUMPS.size() - 1; i >= 0; i--) {
+                boolean l = DUMPS.get(i).startsWith("LOG");
+                if (l == isLog) {
+                    count++;
+                    if (count > max) DUMPS.remove(i);
+                }
+            }
+        }
+    }
+
+    private void log(String s) {
+        add("LOG " + s + "\n", true);
+    }
+
     public void goSearch() {
         steps = 0;
         backs = 0;
+        log("Recherche demandee");
         handler.removeCallbacks(searchStep);
         handler.post(searchStep);
     }
@@ -44,29 +63,42 @@ public class ScanService extends AccessibilityService {
         @Override
         public void run() {
             steps++;
-            if (steps > 8) return;
+            if (steps > 8) {
+                log("abandon apres 8 etapes");
+                return;
+            }
             AccessibilityNodeInfo root = getRootInActiveWindow();
-            if (root == null || !APP.equals(String.valueOf(root.getPackageName()))) return;
-
+            if (root == null) {
+                log("etape " + steps + ": ecran illisible");
+                handler.postDelayed(searchStep, 700);
+                return;
+            }
+            String pkg = String.valueOf(root.getPackageName());
+            if (!APP.equals(pkg)) {
+                log("etape " + steps + ": autre appli " + pkg);
+                return;
+            }
             AccessibilityNodeInfo box = findId(root, "searchInput", 0);
             if (box != null) {
                 box.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
-                box.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                boolean ok = box.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                log("champ recherche trouve, clic=" + ok);
                 return;
             }
-
-            AccessibilityNodeInfo warn = findText(root, "perdre les informations", 0);
-            if (warn != null) {
-                AccessibilityNodeInfo ok = findText(root, "Continuer", 0);
-                if (ok != null) clickUp(ok);
+            AccessibilityNodeInfo go = findText(root, "Continuer", 0);
+            if (go != null) {
+                boolean ok = clickUp(go);
+                log("Continuer trouve, clic=" + ok);
                 handler.postDelayed(searchStep, 700);
                 return;
             }
-
             if (backs < 3) {
                 backs++;
-                performGlobalAction(GLOBAL_ACTION_BACK);
+                boolean ok = performGlobalAction(GLOBAL_ACTION_BACK);
+                log("etape " + steps + ": retour " + backs + " (" + ok + ")");
                 handler.postDelayed(searchStep, 700);
+            } else {
+                log("ni champ recherche ni Continuer");
             }
         }
     };
@@ -110,33 +142,20 @@ public class ScanService extends AccessibilityService {
             pending = false;
             AccessibilityNodeInfo root = getRootInActiveWindow();
             if (root == null) return;
-            String pkg = String.valueOf(root.getPackageName());
-            if (skip(pkg)) return;
+            if (!APP.equals(String.valueOf(root.getPackageName()))) return;
             StringBuilder sb = new StringBuilder();
-            sb.append("PKG ").append(pkg).append("\n");
             dump(root, 0, sb);
             String s = sb.toString();
             if (s.equals(last)) return;
             last = s;
-            synchronized (DUMPS) {
-                DUMPS.add("=== ecran ===\n" + s);
-                while (DUMPS.size() > 12) DUMPS.remove(0);
-            }
+            add("=== ecran ===\n" + s, false);
         }
     };
-
-    private boolean skip(String p) {
-        return p.equals(getPackageName())
-                || p.equals("com.android.systemui")
-                || p.equals("com.anthropic.claude")
-                || p.contains("launcher");
-    }
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
         CharSequence p = event.getPackageName();
-        if (p != null) lastPkg = p.toString();
-        if (skip(lastPkg)) return;
+        if (p == null || !APP.equals(p.toString())) return;
         if (!pending) {
             pending = true;
             handler.postDelayed(capture, 800);
@@ -148,7 +167,7 @@ public class ScanService extends AccessibilityService {
     }
 
     private void dump(AccessibilityNodeInfo n, int depth, StringBuilder sb) {
-        if (n == null || depth > 25) return;
+        if (n == null || depth > 25 || sb.length() > 6000) return;
         CharSequence t = n.getText();
         CharSequence d = n.getContentDescription();
         String id = n.getViewIdResourceName();
