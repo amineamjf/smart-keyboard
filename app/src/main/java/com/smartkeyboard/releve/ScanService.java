@@ -18,7 +18,8 @@ public class ScanService extends AccessibilityService {
     private boolean pending = false;
     private String lastPkg = "";
     private String last = "";
-    private int tries = 0;
+    private int steps = 0;
+    private int backs = 0;
 
     @Override
     protected void onServiceConnected() {
@@ -33,7 +34,8 @@ public class ScanService extends AccessibilityService {
     }
 
     public void goSearch() {
-        tries = 0;
+        steps = 0;
+        backs = 0;
         handler.removeCallbacks(searchStep);
         handler.post(searchStep);
     }
@@ -41,20 +43,31 @@ public class ScanService extends AccessibilityService {
     private final Runnable searchStep = new Runnable() {
         @Override
         public void run() {
+            steps++;
+            if (steps > 8) return;
             AccessibilityNodeInfo root = getRootInActiveWindow();
-            boolean inApp = root != null && APP.equals(String.valueOf(root.getPackageName()));
-            if (inApp) {
-                AccessibilityNodeInfo n = findId(root, "searchInput", 0);
-                if (n != null) {
-                    n.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
-                    n.performAction(AccessibilityNodeInfo.ACTION_CLICK);
-                    return;
-                }
+            if (root == null || !APP.equals(String.valueOf(root.getPackageName()))) return;
+
+            AccessibilityNodeInfo box = findId(root, "searchInput", 0);
+            if (box != null) {
+                box.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
+                box.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                return;
             }
-            if (tries >= 4 || !inApp) return;
-            tries++;
-            performGlobalAction(GLOBAL_ACTION_BACK);
-            handler.postDelayed(searchStep, 700);
+
+            AccessibilityNodeInfo warn = findText(root, "perdre les informations", 0);
+            if (warn != null) {
+                AccessibilityNodeInfo ok = findText(root, "Continuer", 0);
+                if (ok != null) clickUp(ok);
+                handler.postDelayed(searchStep, 700);
+                return;
+            }
+
+            if (backs < 3) {
+                backs++;
+                performGlobalAction(GLOBAL_ACTION_BACK);
+                handler.postDelayed(searchStep, 700);
+            }
         }
     };
 
@@ -67,6 +80,28 @@ public class ScanService extends AccessibilityService {
             if (r != null) return r;
         }
         return null;
+    }
+
+    private AccessibilityNodeInfo findText(AccessibilityNodeInfo n, String s, int depth) {
+        if (n == null || depth > 30) return null;
+        CharSequence t = n.getText();
+        if (t != null && t.toString().contains(s)) return n;
+        for (int i = 0; i < n.getChildCount(); i++) {
+            AccessibilityNodeInfo r = findText(n.getChild(i), s, depth + 1);
+            if (r != null) return r;
+        }
+        return null;
+    }
+
+    private boolean clickUp(AccessibilityNodeInfo n) {
+        AccessibilityNodeInfo c = n;
+        for (int i = 0; i < 5 && c != null; i++) {
+            if (c.isClickable()) {
+                return c.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+            }
+            c = c.getParent();
+        }
+        return n.performAction(AccessibilityNodeInfo.ACTION_CLICK);
     }
 
     private final Runnable capture = new Runnable() {
