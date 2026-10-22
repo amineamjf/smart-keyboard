@@ -46,6 +46,7 @@ public class ScanService extends AccessibilityService {
     private long photoT = 0;
     private int photoCount = 0;
     private boolean afterPhoto = false;
+    private int photoTaps = 0;
 
     @Override
     protected void onServiceConnected() {
@@ -392,6 +393,7 @@ public class ScanService extends AccessibilityService {
     private void startPhoto() {
         busy = true;
         photoPhase = 1;
+        photoTaps = 0;
         photoT = SystemClock.uptimeMillis();
         log("PHOTO: OK touche, ouverture de l'appareil photo");
         handler.postDelayed(photoStep, 500);
@@ -441,7 +443,7 @@ public class ScanService extends AccessibilityService {
                 log("PHOTO: declencheur touche (" + ok + ")");
                 photoPhase = 4;
                 photoT = now;
-                handler.postDelayed(photoStep, 1000);
+                handler.postDelayed(photoStep, 2000);
                 return;
             } else if (photoPhase == 4) {
                 boolean ok = tap(0.793f, 0.862f);
@@ -459,7 +461,15 @@ public class ScanService extends AccessibilityService {
                     submit(subValue);
                     return;
                 }
-                if (now - photoT > 6000) {
+                if (now - photoT > 1500 && photoTaps < 3) {
+                    photoTaps++;
+                    photoT = now;
+                    boolean ok2 = tap(0.793f, 0.862f);
+                    log("PHOTO: valider re-touche (" + ok2 + ")");
+                    handler.postDelayed(photoStep, 500);
+                    return;
+                }
+                if (now - photoT > 3000) {
                     photoPhase = 0;
                     finish("STOP: retour au releve impossible");
                     return;
