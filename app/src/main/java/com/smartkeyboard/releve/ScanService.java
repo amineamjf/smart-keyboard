@@ -41,12 +41,13 @@ public class ScanService extends AccessibilityService {
     private int subPhase = 0;
     private long subPhaseT = 0;
 
-    private static final long PHOTO_DELAY_MS = 1000;
+    private static final long PHOTO_DELAY_MS = 2500;
     private int photoPhase = 0;
     private long photoT = 0;
     private int photoCount = 0;
     private boolean afterPhoto = false;
     private int photoTaps = 0;
+    private long photoMsgSeen = 0;
 
     @Override
     protected void onServiceConnected() {
@@ -258,6 +259,15 @@ public class ScanService extends AccessibilityService {
             String meter = meterLabel(root);
             AccessibilityNodeInfo photoMsg = findText(root, "Photo obligatoire", 0);
             if (photoMsg != null) {
+                if (photoMsgSeen == 0) {
+                    photoMsgSeen = now;
+                    log("PHOTO: message vu, attente 1,5 s");
+                }
+                if (now - photoMsgSeen < 1500) {
+                    handler.postDelayed(submitStep, POLL);
+                    return;
+                }
+                photoMsgSeen = 0;
                 if (photoCount >= 1) {
                     finish("STOP: photo encore demandee apres la prise");
                     return;
@@ -358,6 +368,7 @@ public class ScanService extends AccessibilityService {
 
     private void finish(String msg) {
         busy = false;
+        photoMsgSeen = 0;
         log(msg);
     }
 
@@ -443,7 +454,7 @@ public class ScanService extends AccessibilityService {
                 log("PHOTO: declencheur touche (" + ok + ")");
                 photoPhase = 4;
                 photoT = now;
-                handler.postDelayed(photoStep, 2000);
+                handler.postDelayed(photoStep, 3500);
                 return;
             } else if (photoPhase == 4) {
                 boolean ok = tap(0.793f, 0.862f);
