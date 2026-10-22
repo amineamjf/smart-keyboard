@@ -245,7 +245,13 @@ public class ScanService extends AccessibilityService {
             AccessibilityNodeInfo field = findId(root, "modelInputIdx", 0);
             AccessibilityNodeInfo dialog = findText(root, "jug", 0);
             String meter = meterLabel(root);
-
+            AccessibilityNodeInfo photoMsg = findText(root, "Photo obligatoire", 0);
+            if (photoMsg != null) {
+                AccessibilityNodeInfo okp = findExact(root, "Ok", 0);
+                if (okp != null) tapNode(okp);
+                finish("PHOTO: prenez la photo a la main");
+                return;
+            }
             if (subPhase == 1) {
                 if (dialog != null) {
                     AccessibilityNodeInfo ok = findExact(root, "Ok", 0);
