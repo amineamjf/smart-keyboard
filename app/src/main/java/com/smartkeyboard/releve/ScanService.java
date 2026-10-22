@@ -41,6 +41,12 @@ public class ScanService extends AccessibilityService {
     private int subPhase = 0;
     private long subPhaseT = 0;
 
+    private static final long PHOTO_DELAY_MS = 1000;
+    private int photoPhase = 0;
+    private long photoT = 0;
+    private int photoCount = 0;
+    private boolean afterPhoto = false;
+
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
@@ -177,6 +183,8 @@ public class ScanService extends AccessibilityService {
         stopFlag = true;
         handler.removeCallbacks(submitStep);
         handler.removeCallbacks(searchStep);
+        handler.removeCallbacks(photoStep);
+        photoPhase = 0;
         busy = false;
         log("STOP demande");
     }
@@ -190,6 +198,8 @@ public class ScanService extends AccessibilityService {
             log("envoi: rien a envoyer");
             return;
         }
+        if (!afterPhoto) photoCount = 0;
+        afterPhoto = false;
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null || !APP.equals(String.valueOf(root.getPackageName()))) {
             log("envoi: pas dans l'application");
@@ -247,9 +257,14 @@ public class ScanService extends AccessibilityService {
             String meter = meterLabel(root);
             AccessibilityNodeInfo photoMsg = findText(root, "Photo obligatoire", 0);
             if (photoMsg != null) {
+                if (photoCount >= 1) {
+                    finish("STOP: photo encore demandee apres la prise");
+                    return;
+                }
                 AccessibilityNodeInfo okp = findExact(root, "Ok", 0);
                 if (okp != null) tapNode(okp);
-                finish("PHOTO: prenez la photo a la main");
+                photoCount++;
+                startPhoto();
                 return;
             }
             if (subPhase == 1) {
@@ -372,6 +387,121 @@ public class ScanService extends AccessibilityService {
         return tapAbs(r.centerX(), r.centerY());
     }
 
+    // ---------- Photo ----------
+
+    private void startPhoto() {
+        busy = true;
+        photoPhase = 1;
+        photoT = SystemClock.uptimeMillis();
+        log("PHOTO: OK touche, ouverture de l'appareil photo");
+        handler.postDelayed(photoStep, 500);
+    }
+
+    private final Runnable photoStep = new Runnable() {
+        @Override
+        public void run() {
+            if (stopFlag) {
+                photoPhase = 0;
+                finish("arret demande (photo)");
+                return;
+            }
+            long now = SystemClock.uptimeMillis();
+            AccessibilityNodeInfo root = getRootInActiveWindow();
+            String pkg = root == null ? "" : String.valueOf(root.getPackageName());
+            boolean inApp = APP.equals(pkg);
+
+            if (photoPhase == 1) {
+                if (inApp && findText(root, "Photo obligatoire", 0) == null) {
+                    tapCamera();
+                    photoPhase = 2;
+                    photoT = now;
+                    handler.postDelayed(photoStep, 300);
+                    return;
+                }
+                if (now - photoT > 3000) {
+                    photoPhase = 0;
+                    finish("STOP: fenetre photo non fermee");
+                    return;
+                }
+            } else if (photoPhase == 2) {
+                if (root != null && !inApp && pkg.length() > 0) {
+                    photoPhase = 3;
+                    photoT = now;
+                    log("PHOTO: appareil ouvert (" + pkg + ")");
+                    handler.postDelayed(photoStep, PHOTO_DELAY_MS);
+                    return;
+                }
+                if (now - photoT > 5000) {
+                    photoPhase = 0;
+                    finish("STOP: l'appareil photo ne s'ouvre pas");
+                    return;
+                }
+            } else if (photoPhase == 3) {
+                boolean ok = tap(0.5f, 0.856f);
+                log("PHOTO: declencheur touche (" + ok + ")");
+                photoPhase = 4;
+                photoT = now;
+                handler.postDelayed(photoStep, 1000);
+                return;
+            } else if (photoPhase == 4) {
+                boolean ok = tap(0.793f, 0.862f);
+                log("PHOTO: valider touche (" + ok + ")");
+                photoPhase = 5;
+                photoT = now;
+                handler.postDelayed(photoStep, 500);
+                return;
+            } else if (photoPhase == 5) {
+                if (inApp && findId(root, "modelInputIdx", 0) != null) {
+                    photoPhase = 0;
+                    busy = false;
+                    afterPhoto = true;
+                    log("PHOTO: retour au releve, nouvelle validation");
+                    submit(subValue);
+                    return;
+                }
+                if (now - photoT > 6000) {
+                    photoPhase = 0;
+                    finish("STOP: retour au releve impossible");
+                    return;
+                }
+            }
+            handler.postDelayed(photoStep, POLL);
+        }
+    };
+
+    private void tapCamera() {
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null) return;
+        AccessibilityNodeInfo field = findId(root, "modelInputIdx", 0);
+        if (field == null) {
+            log("appareil photo: champ introuvable");
+            return;
+        }
+        Rect f = new Rect();
+        field.getBoundsInScreen(f);
+        AccessibilityNodeInfo cam = findRightOf(root, f, 0);
+        if (cam == null) {
+            log("appareil photo: bouton introuvable");
+            return;
+        }
+        boolean t = tapNode(cam);
+        log("appareil photo: bouton touche (" + t + ")");
+    }
+
+    private AccessibilityNodeInfo findRightOf(AccessibilityNodeInfo n, Rect f, int depth) {
+        if (n == null || depth > 30) return null;
+        if (n.isClickable() && String.valueOf(n.getClassName()).endsWith("Button")) {
+            Rect r = new Rect();
+            n.getBoundsInScreen(r);
+            if (r.left >= f.right - 5 && r.bottom > f.top && r.top < f.bottom) return n;
+        }
+        for (int i = 0; i < n.getChildCount(); i++) {
+            AccessibilityNodeInfo x = findRightOf(n.getChild(i), f, depth + 1);
+            if (x != null) return x;
+        }
+        return null;
+    }
+
     // ---------- Outils ----------
 
     private boolean tap(float fx, float fy) {
@@ -485,4 +615,4 @@ public class ScanService extends AccessibilityService {
             dump(n.getChild(i), depth + 1, sb);
         }
     }
-                                        }
+                    }
