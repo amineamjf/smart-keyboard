@@ -1,9 +1,13 @@
 package com.smartkeyboard.releve;
 
 import android.accessibilityservice.AccessibilityService;
+import android.accessibilityservice.GestureDescription;
+import android.graphics.Path;
 import android.graphics.Rect;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.DisplayMetrics;
+import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import java.util.ArrayList;
@@ -18,7 +22,7 @@ public class ScanService extends AccessibilityService {
     private boolean pending = false;
     private String last = "";
     private int steps = 0;
-    private int backs = 0;
+    private int phase = 0;
 
     @Override
     protected void onServiceConnected() {
@@ -53,7 +57,7 @@ public class ScanService extends AccessibilityService {
 
     public void goSearch() {
         steps = 0;
-        backs = 0;
+        phase = 0;
         log("Recherche demandee");
         handler.removeCallbacks(searchStep);
         handler.post(searchStep);
@@ -63,14 +67,14 @@ public class ScanService extends AccessibilityService {
         @Override
         public void run() {
             steps++;
-            if (steps > 8) {
-                log("abandon apres 8 etapes");
+            if (steps > 14) {
+                log("abandon apres 14 etapes");
                 return;
             }
             AccessibilityNodeInfo root = getRootInActiveWindow();
             if (root == null) {
                 log("etape " + steps + ": ecran illisible");
-                handler.postDelayed(searchStep, 700);
+                handler.postDelayed(searchStep, 600);
                 return;
             }
             String pkg = String.valueOf(root.getPackageName());
@@ -88,20 +92,39 @@ public class ScanService extends AccessibilityService {
             AccessibilityNodeInfo go = findText(root, "Continuer", 0);
             if (go != null) {
                 boolean ok = clickUp(go);
-                log("Continuer trouve, clic=" + ok);
-                handler.postDelayed(searchStep, 700);
+                log("Continuer trouve par texte, clic=" + ok);
+                handler.postDelayed(searchStep, 900);
                 return;
             }
-            if (backs < 3) {
-                backs++;
+            if (phase == 0) {
+                phase = 1;
                 boolean ok = performGlobalAction(GLOBAL_ACTION_BACK);
-                log("etape " + steps + ": retour " + backs + " (" + ok + ")");
-                handler.postDelayed(searchStep, 700);
-            } else {
-                log("ni champ recherche ni Continuer");
+                log("retour demande (" + ok + ")");
+                handler.postDelayed(searchStep, 1000);
+                return;
             }
+            if (phase == 1) {
+                phase = 2;
+                boolean ok = tap(0.649f, 0.560f);
+                log("clic par position sur Continuer (" + ok + ")");
+                handler.postDelayed(searchStep, 1200);
+                return;
+            }
+            handler.postDelayed(searchStep, 600);
         }
     };
+
+    private boolean tap(float fx, float fy) {
+        DisplayMetrics dm = new DisplayMetrics();
+        WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+        wm.getDefaultDisplay().getRealMetrics(dm);
+        Path p = new Path();
+        p.moveTo(dm.widthPixels * fx, dm.heightPixels * fy);
+        GestureDescription.StrokeDescription st =
+                new GestureDescription.StrokeDescription(p, 0, 60);
+        GestureDescription g = new GestureDescription.Builder().addStroke(st).build();
+        return dispatchGesture(g, null, null);
+    }
 
     private AccessibilityNodeInfo findId(AccessibilityNodeInfo n, String id, int depth) {
         if (n == null || depth > 30) return null;
