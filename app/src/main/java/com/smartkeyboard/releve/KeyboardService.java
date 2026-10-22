@@ -4,6 +4,8 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.inputmethodservice.InputMethodService;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
@@ -49,7 +51,10 @@ public class KeyboardService extends InputMethodService {
             if (ScanService.instance == null) {
                 Toast.makeText(this, "Service Releve Scan inactif", Toast.LENGTH_SHORT).show();
             } else {
-                ScanService.instance.goSearch();
+                requestHideSelf(0);
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    if (ScanService.instance != null) ScanService.instance.goSearch();
+                }, 350);
             }
         });
         right.addView(search, new LinearLayout.LayoutParams(
