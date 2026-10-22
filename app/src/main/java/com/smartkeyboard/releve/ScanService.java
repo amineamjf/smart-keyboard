@@ -19,6 +19,7 @@ public class ScanService extends AccessibilityService {
     private static final String APP = "com.somei.smartmobility.srmrsk";
     private static final long POLL = 60;
     public static ScanService instance;
+    public static boolean live = false;
     public static final ArrayList<String> DUMPS = new ArrayList<>();
 
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -32,10 +33,19 @@ public class ScanService extends AccessibilityService {
     private long lastTap = 0;
     private long backTime = 0;
 
+    private boolean busy = false;
+    private boolean stopFlag = false;
+    private boolean subRetried = false;
+    private String subValue = "";
+    private String subMeter = "";
+    private int subPhase = 0;
+    private long subPhaseT = 0;
+
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
         instance = this;
+        live = false;
     }
 
     @Override
@@ -48,7 +58,7 @@ public class ScanService extends AccessibilityService {
         synchronized (DUMPS) {
             DUMPS.add(s);
             int count = 0;
-            int max = isLog ? 25 : 3;
+            int max = isLog ? 30 : 3;
             for (int i = DUMPS.size() - 1; i >= 0; i--) {
                 boolean l = DUMPS.get(i).startsWith("LOG");
                 if (l == isLog) {
@@ -63,6 +73,8 @@ public class ScanService extends AccessibilityService {
         long ms = SystemClock.uptimeMillis() - t0;
         add("LOG " + s + " (+" + ms + "ms)\n", true);
     }
+
+    // ---------- Recherche ----------
 
     public void goSearch() {
         steps = 0;
@@ -159,6 +171,203 @@ public class ScanService extends AccessibilityService {
         }
     };
 
+    // ---------- Envoi du releve ----------
+
+    public void stopAll() {
+        stopFlag = true;
+        handler.removeCallbacks(submitStep);
+        handler.removeCallbacks(searchStep);
+        busy = false;
+        log("STOP demande");
+    }
+
+    public void submit(String value) {
+        if (busy) {
+            log("envoi deja en cours");
+            return;
+        }
+        if (value == null || value.length() == 0) {
+            log("envoi: rien a envoyer");
+            return;
+        }
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null || !APP.equals(String.valueOf(root.getPackageName()))) {
+            log("envoi: pas dans l'application");
+            return;
+        }
+        AccessibilityNodeInfo btn = findId(root, "btn-cloture-success", 0);
+        AccessibilityNodeInfo field = findId(root, "modelInputIdx", 0);
+        if (btn == null || field == null) {
+            log("envoi: ce n'est pas l'ecran Releve");
+            return;
+        }
+        String cur = textOf(field);
+        if (!value.equals(cur)) {
+            log("envoi refuse: champ=" + cur + " mais clavier=" + value);
+            return;
+        }
+        subValue = value;
+        subMeter = meterLabel(root);
+        t0 = SystemClock.uptimeMillis();
+        if (!live) {
+            log("SIMULATION ok: valeur " + value + ", " + subMeter);
+            return;
+        }
+        stopFlag = false;
+        boolean t = tapNode(btn);
+        if (!t) {
+            log("envoi: position du bouton invalide");
+            return;
+        }
+        busy = true;
+        subPhase = 1;
+        subPhaseT = SystemClock.uptimeMillis();
+        log("ENVOI REEL " + value + ", " + subMeter + ", J'ai fini 1 touche");
+        handler.postDelayed(submitStep, 150);
+    }
+
+    private final Runnable submitStep = new Runnable() {
+        @Override
+        public void run() {
+            if (stopFlag) {
+                finish("arret demande");
+                return;
+            }
+            long now = SystemClock.uptimeMillis();
+            AccessibilityNodeInfo root = getRootInActiveWindow();
+            boolean inApp = root != null
+                    && APP.equals(String.valueOf(root.getPackageName()));
+            if (!inApp) {
+                if (now - subPhaseT > 3000) finish("STOP: ecran illisible");
+                else handler.postDelayed(submitStep, POLL);
+                return;
+            }
+            AccessibilityNodeInfo field = findId(root, "modelInputIdx", 0);
+            AccessibilityNodeInfo dialog = findText(root, "jug", 0);
+            String meter = meterLabel(root);
+
+            if (subPhase == 1) {
+                if (dialog != null) {
+                    AccessibilityNodeInfo ok = findExact(root, "Ok", 0);
+                    if (ok != null) {
+                        boolean t = tapNode(ok);
+                        log("message: Ok touche (" + t + ")");
+                        subPhase = 2;
+                        subPhaseT = now;
+                        handler.postDelayed(submitStep, 250);
+                        return;
+                    }
+                } else if (meter.length() > 0 && !meter.equals(subMeter)) {
+                    finish("FIN OK: compteur suivant apres une seule validation");
+                    return;
+                }
+                if (now - subPhaseT > 3500) {
+                    finish("STOP: ni message ni changement apres 3,5 s");
+                    return;
+                }
+            } else if (subPhase == 2) {
+                if (dialog == null && field != null && isEmptyField(field)) {
+                    boolean t = tapNode(field);
+                    log("champ vide: toucher pour saisir (" + t + ")");
+                    subPhase = 3;
+                    subPhaseT = now;
+                    subRetried = false;
+                    handler.postDelayed(submitStep, 250);
+                    return;
+                }
+                if (now - subPhaseT > 3000) {
+                    finish("STOP: champ non vide ou message encore present");
+                    return;
+                }
+            } else if (subPhase == 3) {
+                KeyboardService k = KeyboardService.instance;
+                if (field != null && isEmptyField(field) && k != null
+                        && k.typeText(subValue)) {
+                    log("saisie de " + subValue);
+                    subPhase = 4;
+                    subPhaseT = now;
+                    handler.postDelayed(submitStep, 150);
+                    return;
+                }
+                if (!subRetried && now - subPhaseT > 1200 && field != null) {
+                    subRetried = true;
+                    tapNode(field);
+                }
+                if (now - subPhaseT > 3000) {
+                    finish("STOP: clavier pas pret pour la saisie");
+                    return;
+                }
+            } else if (subPhase == 4) {
+                if (field != null && subValue.equals(textOf(field))) {
+                    AccessibilityNodeInfo btn = findId(root, "btn-cloture-success", 0);
+                    if (btn == null) {
+                        finish("STOP: bouton J'ai fini introuvable");
+                        return;
+                    }
+                    boolean t = tapNode(btn);
+                    log("J'ai fini 2: toucher (" + t + ")");
+                    subPhase = 5;
+                    subPhaseT = now;
+                    handler.postDelayed(submitStep, 250);
+                    return;
+                }
+                if (now - subPhaseT > 1500) {
+                    String c = field == null ? "?" : textOf(field);
+                    finish("STOP: champ=" + c + " au lieu de " + subValue);
+                    return;
+                }
+            } else if (subPhase == 5) {
+                if (dialog != null) {
+                    finish("STOP: le message est revenu");
+                    return;
+                }
+                if (meter.length() > 0 && !meter.equals(subMeter)) {
+                    finish("FIN OK: compteur suivant");
+                    return;
+                }
+                if (now - subPhaseT > 4000) {
+                    finish("STOP: pas de changement apres la 2e validation");
+                    return;
+                }
+            }
+            handler.postDelayed(submitStep, POLL);
+        }
+    };
+
+    private void finish(String msg) {
+        busy = false;
+        log(msg);
+    }
+
+    private String textOf(AccessibilityNodeInfo n) {
+        CharSequence t = n.getText();
+        return t == null ? "" : t.toString().trim();
+    }
+
+    private boolean isEmptyField(AccessibilityNodeInfo n) {
+        String t = textOf(n);
+        return t.length() == 0 || t.equalsIgnoreCase("Index");
+    }
+
+    private String meterLabel(AccessibilityNodeInfo root) {
+        AccessibilityNodeInfo m = findText(root, "compteur :", 0);
+        return m == null ? "" : textOf(m);
+    }
+
+    private boolean tapNode(AccessibilityNodeInfo n) {
+        Rect r = new Rect();
+        n.getBoundsInScreen(r);
+        DisplayMetrics dm = new DisplayMetrics();
+        WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+        wm.getDefaultDisplay().getRealMetrics(dm);
+        if (r.width() <= 0 || r.height() <= 0) return false;
+        if (r.centerX() < 0 || r.centerX() > dm.widthPixels) return false;
+        if (r.centerY() < 0 || r.centerY() > dm.heightPixels) return false;
+        return tapAbs(r.centerX(), r.centerY());
+    }
+
+    // ---------- Outils ----------
+
     private boolean tap(float fx, float fy) {
         DisplayMetrics dm = new DisplayMetrics();
         WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
@@ -192,6 +401,17 @@ public class ScanService extends AccessibilityService {
         if (t != null && t.toString().contains(s)) return n;
         for (int i = 0; i < n.getChildCount(); i++) {
             AccessibilityNodeInfo r = findText(n.getChild(i), s, depth + 1);
+            if (r != null) return r;
+        }
+        return null;
+    }
+
+    private AccessibilityNodeInfo findExact(AccessibilityNodeInfo n, String s, int depth) {
+        if (n == null || depth > 30) return null;
+        CharSequence t = n.getText();
+        if (t != null && t.toString().trim().equalsIgnoreCase(s)) return n;
+        for (int i = 0; i < n.getChildCount(); i++) {
+            AccessibilityNodeInfo r = findExact(n.getChild(i), s, depth + 1);
             if (r != null) return r;
         }
         return null;
@@ -259,4 +479,4 @@ public class ScanService extends AccessibilityService {
             dump(n.getChild(i), depth + 1, sb);
         }
     }
-}
+                                        }
