@@ -17,7 +17,7 @@ import java.util.ArrayList;
 public class ScanService extends AccessibilityService {
 
     private static final String APP = "com.somei.smartmobility.srmrsk";
-    private static final long POLL = 120;
+    private static final long POLL = 60;
     public static ScanService instance;
     public static final ArrayList<String> DUMPS = new ArrayList<>();
 
@@ -26,9 +26,11 @@ public class ScanService extends AccessibilityService {
     private String last = "";
     private int steps = 0;
     private int phase = 0;
+    private int backsDone = 0;
     private int contTries = 0;
     private long t0 = 0;
     private long lastTap = 0;
+    private long backTime = 0;
 
     @Override
     protected void onServiceConnected() {
@@ -65,6 +67,7 @@ public class ScanService extends AccessibilityService {
     public void goSearch() {
         steps = 0;
         phase = 0;
+        backsDone = 0;
         contTries = 0;
         lastTap = 0;
         t0 = SystemClock.uptimeMillis();
@@ -77,7 +80,7 @@ public class ScanService extends AccessibilityService {
         @Override
         public void run() {
             steps++;
-            if (steps > 70) {
+            if (steps > 160) {
                 log("abandon, delai depasse");
                 return;
             }
@@ -91,6 +94,7 @@ public class ScanService extends AccessibilityService {
                 log("autre appli " + pkg);
                 return;
             }
+            long now = SystemClock.uptimeMillis();
             AccessibilityNodeInfo box = findId(root, "searchInput", 0);
             if (box != null) {
                 box.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
@@ -104,7 +108,6 @@ public class ScanService extends AccessibilityService {
             }
             AccessibilityNodeInfo go = findText(root, "Continuer", 0);
             if (go != null) {
-                long now = SystemClock.uptimeMillis();
                 if (contTries >= 1 && now - lastTap < 900) {
                     handler.postDelayed(searchStep, POLL);
                     return;
@@ -123,22 +126,34 @@ public class ScanService extends AccessibilityService {
                     boolean ok = clickUp(go);
                     log("Continuer: clic direct (" + ok + ")");
                 }
-                handler.postDelayed(searchStep, 400);
+                handler.postDelayed(searchStep, 150);
                 return;
             }
             if (phase == 0) {
                 phase = 1;
+                backsDone = 1;
+                backTime = now;
                 boolean ok = performGlobalAction(GLOBAL_ACTION_BACK);
                 log("retour demande (" + ok + ")");
-                handler.postDelayed(searchStep, 150);
+                handler.postDelayed(searchStep, POLL);
                 return;
             }
-            if (phase == 1 && steps > 30) {
-                phase = 2;
-                boolean ok = tap(0.649f, 0.560f);
-                log("rien trouve, toucher position fixe (" + ok + ")");
-                handler.postDelayed(searchStep, 400);
-                return;
+            if (phase == 1) {
+                if (backsDone < 2 && now - backTime > 1100) {
+                    backsDone = 2;
+                    backTime = now;
+                    boolean ok = performGlobalAction(GLOBAL_ACTION_BACK);
+                    log("2e retour (" + ok + ")");
+                    handler.postDelayed(searchStep, POLL);
+                    return;
+                }
+                if (now - backTime > 2500) {
+                    phase = 2;
+                    boolean ok = tap(0.649f, 0.560f);
+                    log("rien trouve, toucher position fixe (" + ok + ")");
+                    handler.postDelayed(searchStep, 300);
+                    return;
+                }
             }
             handler.postDelayed(searchStep, POLL);
         }
@@ -244,4 +259,4 @@ public class ScanService extends AccessibilityService {
             dump(n.getChild(i), depth + 1, sb);
         }
     }
-                }
+}
