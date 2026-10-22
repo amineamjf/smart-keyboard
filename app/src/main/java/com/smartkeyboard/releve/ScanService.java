@@ -7,6 +7,7 @@ import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.DisplayMetrics;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
@@ -16,6 +17,7 @@ import java.util.ArrayList;
 public class ScanService extends AccessibilityService {
 
     private static final String APP = "com.somei.smartmobility.srmrsk";
+    private static final long POLL = 120;
     public static ScanService instance;
     public static final ArrayList<String> DUMPS = new ArrayList<>();
 
@@ -25,6 +27,8 @@ public class ScanService extends AccessibilityService {
     private int steps = 0;
     private int phase = 0;
     private int contTries = 0;
+    private long t0 = 0;
+    private long lastTap = 0;
 
     @Override
     protected void onServiceConnected() {
@@ -54,13 +58,16 @@ public class ScanService extends AccessibilityService {
     }
 
     private void log(String s) {
-        add("LOG " + s + "\n", true);
+        long ms = SystemClock.uptimeMillis() - t0;
+        add("LOG " + s + " (+" + ms + "ms)\n", true);
     }
 
     public void goSearch() {
         steps = 0;
         phase = 0;
         contTries = 0;
+        lastTap = 0;
+        t0 = SystemClock.uptimeMillis();
         log("Recherche demandee");
         handler.removeCallbacks(searchStep);
         handler.post(searchStep);
@@ -70,19 +77,18 @@ public class ScanService extends AccessibilityService {
         @Override
         public void run() {
             steps++;
-            if (steps > 14) {
-                log("abandon apres 14 etapes");
+            if (steps > 70) {
+                log("abandon, delai depasse");
                 return;
             }
             AccessibilityNodeInfo root = getRootInActiveWindow();
             if (root == null) {
-                log("etape " + steps + ": ecran illisible");
-                handler.postDelayed(searchStep, 600);
+                handler.postDelayed(searchStep, POLL);
                 return;
             }
             String pkg = String.valueOf(root.getPackageName());
             if (!APP.equals(pkg)) {
-                log("etape " + steps + ": autre appli " + pkg);
+                log("autre appli " + pkg);
                 return;
             }
             AccessibilityNodeInfo box = findId(root, "searchInput", 0);
@@ -98,7 +104,13 @@ public class ScanService extends AccessibilityService {
             }
             AccessibilityNodeInfo go = findText(root, "Continuer", 0);
             if (go != null) {
+                long now = SystemClock.uptimeMillis();
+                if (contTries >= 1 && now - lastTap < 900) {
+                    handler.postDelayed(searchStep, POLL);
+                    return;
+                }
                 contTries++;
+                lastTap = now;
                 if (contTries == 1) {
                     Rect r = new Rect();
                     go.getBoundsInScreen(r);
@@ -111,24 +123,24 @@ public class ScanService extends AccessibilityService {
                     boolean ok = clickUp(go);
                     log("Continuer: clic direct (" + ok + ")");
                 }
-                handler.postDelayed(searchStep, 1000);
+                handler.postDelayed(searchStep, 400);
                 return;
             }
             if (phase == 0) {
                 phase = 1;
                 boolean ok = performGlobalAction(GLOBAL_ACTION_BACK);
                 log("retour demande (" + ok + ")");
-                handler.postDelayed(searchStep, 1000);
+                handler.postDelayed(searchStep, 150);
                 return;
             }
-            if (phase == 1) {
+            if (phase == 1 && steps > 30) {
                 phase = 2;
                 boolean ok = tap(0.649f, 0.560f);
                 log("rien trouve, toucher position fixe (" + ok + ")");
-                handler.postDelayed(searchStep, 1200);
+                handler.postDelayed(searchStep, 400);
                 return;
             }
-            handler.postDelayed(searchStep, 600);
+            handler.postDelayed(searchStep, POLL);
         }
     };
 
@@ -232,4 +244,4 @@ public class ScanService extends AccessibilityService {
             dump(n.getChild(i), depth + 1, sb);
         }
     }
-}
+                }
