@@ -41,7 +41,7 @@ public class ScanService extends AccessibilityService {
     private int subPhase = 0;
     private long subPhaseT = 0;
 
-    private static final long PHOTO_DELAY_MS = 2500;
+    private static final long PHOTO_DELAY_MS = 1000;
     private int photoPhase = 0;
     private long photoT = 0;
     private int photoCount = 0;
@@ -201,6 +201,7 @@ public class ScanService extends AccessibilityService {
             return;
         }
         if (!afterPhoto) photoCount = 0;
+        boolean wasAfterPhoto = afterPhoto;
         afterPhoto = false;
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null || !APP.equals(String.valueOf(root.getPackageName()))) {
@@ -214,6 +215,20 @@ public class ScanService extends AccessibilityService {
             return;
         }
         String cur = textOf(field);
+        if (wasAfterPhoto && live && isEmptyField(field)) {
+            subValue = value;
+            subMeter = meterLabel(root);
+            t0 = SystemClock.uptimeMillis();
+            stopFlag = false;
+            boolean tf = tapNode(field);
+            busy = true;
+            subPhase = 3;
+            subPhaseT = SystemClock.uptimeMillis();
+            subRetried = false;
+            log("apres photo: champ vide, saisie de " + value + " (" + tf + ")");
+            handler.postDelayed(submitStep, 250);
+            return;
+        }
         if (!value.equals(cur)) {
             log("envoi refuse: champ=" + cur + " mais clavier=" + value);
             return;
@@ -454,7 +469,7 @@ public class ScanService extends AccessibilityService {
                 log("PHOTO: declencheur touche (" + ok + ")");
                 photoPhase = 4;
                 photoT = now;
-                handler.postDelayed(photoStep, 3500);
+                handler.postDelayed(photoStep, 2500);
                 return;
             } else if (photoPhase == 4) {
                 boolean ok = tap(0.793f, 0.862f);
