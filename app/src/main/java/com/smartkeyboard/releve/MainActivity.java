@@ -11,11 +11,13 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 public class MainActivity extends Activity {
 
-    private static final String VERSION = "Version 4";
+    private static final String VERSION = "Version 5";
     private TextView out;
+    private Button modeBtn;
 
     @Override
     protected void onCreate(Bundle b) {
@@ -50,6 +52,16 @@ public class MainActivity extends Activity {
             refresh();
         });
 
+        modeBtn = new Button(this);
+        modeBtn.setOnClickListener(v -> {
+            if (ScanService.instance == null) {
+                Toast.makeText(this, "Service inactif", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            ScanService.live = !ScanService.live;
+            refresh();
+        });
+
         out = new TextView(this);
         out.setTextSize(11);
         out.setTextIsSelectable(true);
@@ -60,6 +72,7 @@ public class MainActivity extends Activity {
         root.addView(refresh);
         root.addView(copy);
         root.addView(clear);
+        root.addView(modeBtn);
         root.addView(sv);
         setContentView(root);
     }
@@ -79,10 +92,17 @@ public class MainActivity extends Activity {
                 else screens.append(d).append("\n");
             }
         }
+        boolean live = ScanService.live;
+        modeBtn.setText(live
+                ? "5. MODE REEL ACTIF (toucher pour arreter)"
+                : "5. Mode simulation (toucher pour activer le reel)");
         StringBuilder t = new StringBuilder();
         t.append(VERSION).append("\n");
         t.append("Service: ");
-        t.append(ScanService.instance == null ? "INACTIF" : "actif").append("\n\n");
+        t.append(ScanService.instance == null ? "INACTIF" : "actif").append("\n");
+        t.append(live ? "MODE: REEL (les clics sont actifs)\n"
+                      : "MODE: SIMULATION (aucun clic)\n");
+        t.append("\n");
         t.append(logs.length() == 0 ? "Aucun LOG.\n" : logs.toString());
         t.append("\n");
         t.append(screens.length() == 0 ? "Aucun ecran capture." : screens.toString());
