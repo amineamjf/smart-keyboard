@@ -24,6 +24,7 @@ public class ScanService extends AccessibilityService {
     private String last = "";
     private int steps = 0;
     private int phase = 0;
+    private int contTries = 0;
 
     @Override
     protected void onServiceConnected() {
@@ -59,6 +60,7 @@ public class ScanService extends AccessibilityService {
     public void goSearch() {
         steps = 0;
         phase = 0;
+        contTries = 0;
         log("Recherche demandee");
         handler.removeCallbacks(searchStep);
         handler.post(searchStep);
@@ -96,9 +98,20 @@ public class ScanService extends AccessibilityService {
             }
             AccessibilityNodeInfo go = findText(root, "Continuer", 0);
             if (go != null) {
-                boolean ok = clickUp(go);
-                log("Continuer trouve par texte, clic=" + ok);
-                handler.postDelayed(searchStep, 900);
+                contTries++;
+                if (contTries == 1) {
+                    Rect r = new Rect();
+                    go.getBoundsInScreen(r);
+                    boolean ok = tapAbs(r.centerX(), r.centerY());
+                    log("Continuer: toucher " + r.toShortString() + " (" + ok + ")");
+                } else if (contTries == 2) {
+                    boolean ok = tap(0.649f, 0.560f);
+                    log("Continuer: toucher position fixe (" + ok + ")");
+                } else {
+                    boolean ok = clickUp(go);
+                    log("Continuer: clic direct (" + ok + ")");
+                }
+                handler.postDelayed(searchStep, 1000);
                 return;
             }
             if (phase == 0) {
@@ -111,7 +124,7 @@ public class ScanService extends AccessibilityService {
             if (phase == 1) {
                 phase = 2;
                 boolean ok = tap(0.649f, 0.560f);
-                log("clic par position sur Continuer (" + ok + ")");
+                log("rien trouve, toucher position fixe (" + ok + ")");
                 handler.postDelayed(searchStep, 1200);
                 return;
             }
@@ -123,10 +136,14 @@ public class ScanService extends AccessibilityService {
         DisplayMetrics dm = new DisplayMetrics();
         WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
         wm.getDefaultDisplay().getRealMetrics(dm);
+        return tapAbs(dm.widthPixels * fx, dm.heightPixels * fy);
+    }
+
+    private boolean tapAbs(float x, float y) {
         Path p = new Path();
-        p.moveTo(dm.widthPixels * fx, dm.heightPixels * fy);
+        p.moveTo(x, y);
         GestureDescription.StrokeDescription st =
-                new GestureDescription.StrokeDescription(p, 0, 60);
+                new GestureDescription.StrokeDescription(p, 0, 80);
         GestureDescription g = new GestureDescription.Builder().addStroke(st).build();
         return dispatchGesture(g, null, null);
     }
@@ -215,4 +232,4 @@ public class ScanService extends AccessibilityService {
             dump(n.getChild(i), depth + 1, sb);
         }
     }
-                         }
+}
