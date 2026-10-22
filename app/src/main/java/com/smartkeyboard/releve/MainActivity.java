@@ -14,6 +14,7 @@ import android.widget.TextView;
 
 public class MainActivity extends Activity {
 
+    private static final String VERSION = "Version 4";
     private TextView out;
 
     @Override
@@ -40,6 +41,15 @@ public class MainActivity extends Activity {
             cm.setPrimaryClip(ClipData.newPlainText("scan", out.getText()));
         });
 
+        Button clear = new Button(this);
+        clear.setText("4. Vider");
+        clear.setOnClickListener(v -> {
+            synchronized (ScanService.DUMPS) {
+                ScanService.DUMPS.clear();
+            }
+            refresh();
+        });
+
         out = new TextView(this);
         out.setTextSize(11);
         out.setTextIsSelectable(true);
@@ -49,6 +59,7 @@ public class MainActivity extends Activity {
         root.addView(open);
         root.addView(refresh);
         root.addView(copy);
+        root.addView(clear);
         root.addView(sv);
         setContentView(root);
     }
@@ -60,11 +71,21 @@ public class MainActivity extends Activity {
     }
 
     private void refresh() {
-        StringBuilder sb = new StringBuilder();
+        StringBuilder logs = new StringBuilder();
+        StringBuilder screens = new StringBuilder();
         synchronized (ScanService.DUMPS) {
-            for (String d : ScanService.DUMPS) sb.append(d).append("\n");
+            for (String d : ScanService.DUMPS) {
+                if (d.startsWith("LOG")) logs.append(d);
+                else screens.append(d).append("\n");
+            }
         }
-        if (sb.length() == 0) sb.append("Aucun ecran capture.");
-        out.setText(sb.toString());
+        StringBuilder t = new StringBuilder();
+        t.append(VERSION).append("\n");
+        t.append("Service: ");
+        t.append(ScanService.instance == null ? "INACTIF" : "actif").append("\n\n");
+        t.append(logs.length() == 0 ? "Aucun LOG.\n" : logs.toString());
+        t.append("\n");
+        t.append(screens.length() == 0 ? "Aucun ecran capture." : screens.toString());
+        out.setText(t.toString());
     }
 }
