@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.GestureDescription;
 import android.graphics.Path;
 import android.graphics.Rect;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.DisplayMetrics;
@@ -86,7 +87,11 @@ public class ScanService extends AccessibilityService {
             if (box != null) {
                 box.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
                 boolean ok = box.performAction(AccessibilityNodeInfo.ACTION_CLICK);
-                log("champ recherche trouve, clic=" + ok);
+                Bundle args = new Bundle();
+                args.putCharSequence(
+                        AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "");
+                boolean cleared = box.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args);
+                log("champ recherche: clic=" + ok + ", vide=" + cleared);
                 return;
             }
             AccessibilityNodeInfo go = findText(root, "Continuer", 0);
@@ -210,4 +215,4 @@ public class ScanService extends AccessibilityService {
             dump(n.getChild(i), depth + 1, sb);
         }
     }
-}
+                         }
