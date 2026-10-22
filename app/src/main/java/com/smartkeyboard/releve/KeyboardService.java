@@ -29,6 +29,11 @@ public class KeyboardService extends InputMethodService {
 
     public static KeyboardService instance;
     private final StringBuilder buf = new StringBuilder();
+    private static final long AUTO_DELAY_MS = 500;
+    private final Handler autoHandler = new Handler(Looper.getMainLooper());
+    private final Runnable autoSubmit = () -> {
+        if (buf.length() > 0 && ScanService.instance != null) press("OK");
+    };
 
     // Couleurs
     private static final int C_BG = 0xFFE4E7EF;
@@ -247,6 +252,7 @@ public class KeyboardService extends InputMethodService {
     private void clearAll() {
         InputConnection ic = getCurrentInputConnection();
         if (ic == null) return;
+        autoHandler.removeCallbacks(autoSubmit);
         ic.deleteSurroundingText(buf.length(), 0);
         buf.setLength(0);
     }
@@ -254,6 +260,7 @@ public class KeyboardService extends InputMethodService {
     private void press(String k) {
         InputConnection ic = getCurrentInputConnection();
         if (ic == null) return;
+        autoHandler.removeCallbacks(autoSubmit);
         if (k.equals("<")) {
             ic.deleteSurroundingText(1, 0);
             if (buf.length() > 0) buf.setLength(buf.length() - 1);
@@ -272,12 +279,14 @@ public class KeyboardService extends InputMethodService {
         } else {
             ic.commitText(k, 1);
             buf.append(k);
+            autoHandler.postDelayed(autoSubmit, AUTO_DELAY_MS);
         }
     }
 
     @Override
     public void onStartInputView(EditorInfo info, boolean restarting) {
         super.onStartInputView(info, restarting);
+        autoHandler.removeCallbacks(autoSubmit);
         buf.setLength(0);
     }
-            }
+}
