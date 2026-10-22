@@ -17,7 +17,31 @@ import android.widget.Toast;
 
 public class KeyboardService extends InputMethodService {
 
+    public static KeyboardService instance;
     private final StringBuilder buf = new StringBuilder();
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        instance = this;
+    }
+
+    @Override
+    public void onDestroy() {
+        instance = null;
+        super.onDestroy();
+    }
+
+    public boolean typeText(String s) {
+        InputConnection ic = getCurrentInputConnection();
+        if (ic == null) return false;
+        boolean ok = ic.commitText(s, 1);
+        if (ok) {
+            buf.setLength(0);
+            buf.append(s);
+        }
+        return ok;
+    }
 
     @Override
     public View onCreateInputView() {
@@ -68,7 +92,17 @@ public class KeyboardService extends InputMethodService {
             imm.showInputMethodPicker();
         });
         right.addView(abc, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, (int) (128 * d)));
+                ViewGroup.LayoutParams.MATCH_PARENT, (int) (64 * d)));
+
+        Button stop = new Button(this);
+        stop.setText("STOP");
+        stop.setBackgroundColor(0xFFCC3333);
+        stop.setTextColor(0xFFFFFFFF);
+        stop.setOnClickListener(v -> {
+            if (ScanService.instance != null) ScanService.instance.stopAll();
+        });
+        right.addView(stop, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, (int) (64 * d)));
 
         root.addView(left, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 3f));
         root.addView(right, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
@@ -90,9 +124,17 @@ public class KeyboardService extends InputMethodService {
             ic.deleteSurroundingText(1, 0);
             if (buf.length() > 0) buf.setLength(buf.length() - 1);
         } else if (k.equals("OK")) {
+            String v = buf.toString();
             ClipboardManager cm =
                 (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-            cm.setPrimaryClip(ClipData.newPlainText("index", buf.toString()));
+            cm.setPrimaryClip(ClipData.newPlainText("index", v));
+            if (v.length() > 0) {
+                if (ScanService.instance == null) {
+                    Toast.makeText(this, "Service Releve Scan inactif", Toast.LENGTH_SHORT).show();
+                } else {
+                    ScanService.instance.submit(v);
+                }
+            }
         } else {
             ic.commitText(k, 1);
             buf.append(k);
