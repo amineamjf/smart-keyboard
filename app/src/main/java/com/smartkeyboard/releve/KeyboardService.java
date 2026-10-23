@@ -37,12 +37,12 @@ public class KeyboardService extends InputMethodService {
         if (buf.length() > 0 && ScanService.instance != null) press("OK");
     };
 
+    // Affichage automatique du clavier (retour de l'appareil photo, etc.)
     // Bandeau (compteur + ancien index) au-dessus du clavier
     public static boolean stripOn = true;
     private TextView strip;
     private String stripText = "";
 
-    // Affichage automatique du clavier (retour de l'appareil photo, etc.)
     private boolean searching = false;
     private final Handler showHandler = new Handler(Looper.getMainLooper());
 
@@ -177,6 +177,10 @@ public class KeyboardService extends InputMethodService {
     }
 
     private View buildMain() {
+        return wrapWithStrip(buildKeys(), ViewGroup.LayoutParams.WRAP_CONTENT);
+    }
+
+    private View wrapWithStrip(View keys, int keysHeight) {
         LinearLayout outer = new LinearLayout(this);
         outer.setOrientation(LinearLayout.VERTICAL);
         outer.setBackgroundColor(C_BG);
@@ -196,8 +200,8 @@ public class KeyboardService extends InputMethodService {
         } else {
             strip = null;
         }
-        outer.addView(buildKeys(), new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        outer.addView(keys, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, keysHeight));
         return outer;
     }
 
@@ -258,11 +262,113 @@ public class KeyboardService extends InputMethodService {
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         // Bouton libre pour plus tard (aucune action pour l'instant)
-        right.addView(makeKey("ACTUALISER", C_LIGHT, C_LIGHT_SH, C_TEXT, 12, null),
+        right.addView(makeKey("ABC\nFR / \u0639", C_LIGHT, C_LIGHT_SH, C_TEXT, 12,
+                () -> setInputView(buildLetters())),
                 lp(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         root.addView(left, new LinearLayout.LayoutParams(0, totalH, 3f));
         root.addView(right, new LinearLayout.LayoutParams(0, totalH, 1.35f));
+        return root;
+    }
+
+    // ---------- Clavier lettres (francais / arabe) ----------
+
+    private boolean arabic = false;
+    private boolean caps = false;
+
+    private View buildLetters() {
+        return wrapWithStrip(buildLettersKeys(), dp(5 * 54));
+    }
+
+    private void typeLetter(String t) {
+        InputConnection ic = getCurrentInputConnection();
+        if (ic == null) return;
+        ic.commitText(t, 1);
+        if (caps) {
+            caps = false;
+            setInputView(buildLetters());
+        }
+    }
+
+    private void deleteLetter() {
+        InputConnection ic = getCurrentInputConnection();
+        if (ic == null) return;
+        ic.deleteSurroundingText(1, 0);
+    }
+
+    private LinearLayout letterRow(String[] keys) {
+        LinearLayout r = new LinearLayout(this);
+        r.setOrientation(LinearLayout.HORIZONTAL);
+        for (String k : keys) {
+            final String t = (!arabic && caps) ? k.toUpperCase() : k;
+            r.addView(makeKey(t, C_KEY, C_KEY_SH, C_TEXT, 20, () -> typeLetter(t)),
+                    lp(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
+        }
+        return r;
+    }
+
+    private View buildLettersKeys() {
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(C_BG);
+        root.setPadding(dp(6), dp(6), dp(6), dp(6));
+
+        String[][] rows;
+        String[] extra;
+        if (arabic) {
+            rows = new String[][]{
+                {"\u0636", "\u0635", "\u062B", "\u0642", "\u0641", "\u063A", "\u0639", "\u0647", "\u062E", "\u062D", "\u062C"},
+                {"\u0634", "\u0633", "\u064A", "\u0628", "\u0644", "\u0627", "\u062A", "\u0646", "\u0645", "\u0643", "\u0630"},
+                {"\u0626", "\u0621", "\u0624", "\u0631", "\u0649", "\u0629", "\u0648", "\u0632", "\u0638", "\u0637", "\u062F"}};
+            extra = new String[]{"\u060C", "\u061F", ".", "-", "'"};
+        } else {
+            rows = new String[][]{
+                {"a", "z", "e", "r", "t", "y", "u", "i", "o", "p"},
+                {"q", "s", "d", "f", "g", "h", "j", "k", "l", "m"},
+                {"w", "x", "c", "v", "b", "n", "\u00E9", "\u00E8", "\u00E0", "\u00E7"}};
+            extra = new String[]{"\u00F9", "\u00EA", "'", "-", "."};
+        }
+        for (String[] row : rows) {
+            root.addView(letterRow(row), new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        }
+
+        LinearLayout r4 = new LinearLayout(this);
+        r4.setOrientation(LinearLayout.HORIZONTAL);
+        if (!arabic) {
+            r4.addView(makeKey(caps ? "\u21E7 MAJ" : "\u21E7", caps ? C_TEAL : C_DARK,
+                    caps ? C_TEAL_SH : C_DARK_SH, caps ? 0xFFFFFFFF : C_TEXT, 14, () -> {
+                        caps = !caps;
+                        setInputView(buildLetters());
+                    }), lp(0, ViewGroup.LayoutParams.MATCH_PARENT, 1.4f));
+        }
+        for (String k : extra) {
+            final String t = k;
+            r4.addView(makeKey(t, C_KEY, C_KEY_SH, C_TEXT, 20, () -> typeLetter(t)),
+                    lp(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
+        }
+        r4.addView(makeKey("\u232B", C_DARK, C_DARK_SH, C_TEXT, 20, () -> deleteLetter()),
+                lp(0, ViewGroup.LayoutParams.MATCH_PARENT, 1.4f));
+        root.addView(r4, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        LinearLayout r5 = new LinearLayout(this);
+        r5.setOrientation(LinearLayout.HORIZONTAL);
+        r5.addView(makeKey("123", C_TEAL, C_TEAL_SH, 0xFFFFFFFF, 16,
+                () -> setInputView(buildMain())),
+                lp(0, ViewGroup.LayoutParams.MATCH_PARENT, 1.4f));
+        r5.addView(makeKey(arabic ? "FR" : "\u0639\u0631", C_LIGHT, C_LIGHT_SH, C_TEXT, 16, () -> {
+            arabic = !arabic;
+            caps = false;
+            setInputView(buildLetters());
+        }), lp(0, ViewGroup.LayoutParams.MATCH_PARENT, 1.4f));
+        r5.addView(makeKey(arabic ? "\u0645\u0633\u0627\u0641\u0629" : "espace", C_KEY, C_KEY_SH, C_TEXT, 14,
+                () -> typeLetter(" ")), lp(0, ViewGroup.LayoutParams.MATCH_PARENT, 4f));
+        r5.addView(makeKey("\uD83D\uDD0D", C_TEAL, C_TEAL_SH, 0xFFFFFFFF, 18, () -> search()),
+                lp(0, ViewGroup.LayoutParams.MATCH_PARENT, 1.4f));
+        root.addView(r5, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
         return root;
     }
 

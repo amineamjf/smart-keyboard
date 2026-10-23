@@ -29,10 +29,87 @@ public final class TableReader {
         List<List<String[]>> out = new ArrayList<>();
         if (data.length > 4 && data[0] == 'P' && data[1] == 'K') {
             readXlsx(data, out);
+        } else if (data.length > 8 && (data[0] & 0xFF) == 0xD0 && (data[1] & 0xFF) == 0xCF
+                && (data[2] & 0xFF) == 0x11 && (data[3] & 0xFF) == 0xE0) {
+            readXls(data, out);
+        } else if (looksHtml(data)) {
+            out.add(readHtml(data));
         } else {
             out.add(readText(data));
         }
         return out;
+    }
+
+    // ---------- xls (Excel 97-2003) ----------
+
+    private static void readXls(byte[] data, List<List<String[]>> out) throws Exception {
+        jxl.WorkbookSettings ws = new jxl.WorkbookSettings();
+        ws.setEncoding("Cp1252");
+        ws.setGCDisabled(true);
+        ws.setSuppressWarnings(true);
+        jxl.Workbook wb = jxl.Workbook.getWorkbook(new ByteArrayInputStream(data), ws);
+        try {
+            for (int si = 0; si < wb.getNumberOfSheets(); si++) {
+                jxl.Sheet sh = wb.getSheet(si);
+                ArrayList<String[]> rows = new ArrayList<>();
+                int nc = sh.getColumns();
+                for (int r = 0; r < sh.getRows(); r++) {
+                    String[] row = new String[nc];
+                    for (int c = 0; c < nc; c++) {
+                        jxl.Cell cell = sh.getCell(c, r);
+                        String v;
+                        if (cell.getType() == jxl.CellType.NUMBER
+                                && cell instanceof jxl.NumberCell) {
+                            double d = ((jxl.NumberCell) cell).getValue();
+                            String raw = d == Math.rint(d) && Math.abs(d) < 1e15
+                                    ? String.valueOf((long) d) : String.valueOf(d);
+                            v = Meters.cleanNumber(raw);
+                        } else {
+                            v = cell.getContents();
+                        }
+                        row[c] = v == null ? "" : v;
+                    }
+                    rows.add(row);
+                }
+                out.add(rows);
+            }
+        } finally {
+            wb.close();
+        }
+        if (out.isEmpty()) throw new Exception("Aucune feuille dans le fichier");
+    }
+
+    // ---------- html deguise en .xls ----------
+
+    private static boolean looksHtml(byte[] data) {
+        int n = Math.min(data.length, 2048);
+        String head = new String(data, 0, n, java.nio.charset.StandardCharsets.ISO_8859_1)
+                .toLowerCase(java.util.Locale.ROOT);
+        return head.contains("<table") || head.contains("<html");
+    }
+
+    private static List<String[]> readHtml(byte[] data) {
+        String s = new String(data, java.nio.charset.StandardCharsets.UTF_8);
+        ArrayList<String[]> rows = new ArrayList<>();
+        java.util.regex.Pattern trp = java.util.regex.Pattern.compile(
+                "<tr[^>]*>(.*?)</tr>", java.util.regex.Pattern.CASE_INSENSITIVE
+                        | java.util.regex.Pattern.DOTALL);
+        java.util.regex.Pattern tdp = java.util.regex.Pattern.compile(
+                "<t[dh][^>]*>(.*?)</t[dh]>", java.util.regex.Pattern.CASE_INSENSITIVE
+                        | java.util.regex.Pattern.DOTALL);
+        java.util.regex.Matcher tr = trp.matcher(s);
+        while (tr.find()) {
+            ArrayList<String> cells = new ArrayList<>();
+            java.util.regex.Matcher td = tdp.matcher(tr.group(1));
+            while (td.find()) {
+                String v = td.group(1).replaceAll("<[^>]*>", "")
+                        .replace("&nbsp;", " ").replace("&amp;", "&")
+                        .replace("&lt;", "<").replace("&gt;", ">").trim();
+                cells.add(v);
+            }
+            if (!cells.isEmpty()) rows.add(cells.toArray(new String[0]));
+        }
+        return rows;
     }
 
     // ---------- xlsx ----------
