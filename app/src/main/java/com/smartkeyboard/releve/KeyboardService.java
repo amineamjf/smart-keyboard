@@ -23,6 +23,8 @@ import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.LinearLayout;
+import android.view.Gravity;
+import android.widget.TextView;
 import android.widget.Toast;
 
 public class KeyboardService extends InputMethodService {
@@ -34,6 +36,11 @@ public class KeyboardService extends InputMethodService {
     private final Runnable autoSubmit = () -> {
         if (buf.length() > 0 && ScanService.instance != null) press("OK");
     };
+
+    // Bandeau (compteur + ancien index) au-dessus du clavier
+    public static boolean stripOn = true;
+    private TextView strip;
+    private String stripText = "";
 
     // Affichage automatique du clavier (retour de l'appareil photo, etc.)
     private boolean searching = false;
@@ -59,6 +66,11 @@ public class KeyboardService extends InputMethodService {
     public void onCreate() {
         super.onCreate();
         instance = this;
+        try {
+            stripOn = getSharedPreferences("cfg", Context.MODE_PRIVATE).getBoolean("strip", true);
+        } catch (Exception e) {
+            stripOn = true;
+        }
     }
 
     @Override
@@ -150,7 +162,46 @@ public class KeyboardService extends InputMethodService {
         return buildMain();
     }
 
+    public void setStrip(String t) {
+        stripText = t == null ? "" : t;
+        if (strip != null) strip.setText(stripText.isEmpty() ? "-" : stripText);
+    }
+
+    private void setStripOn(boolean on) {
+        stripOn = on;
+        try {
+            getSharedPreferences("cfg", Context.MODE_PRIVATE).edit().putBoolean("strip", on).apply();
+        } catch (Exception e) {
+            // ignore
+        }
+    }
+
     private View buildMain() {
+        LinearLayout outer = new LinearLayout(this);
+        outer.setOrientation(LinearLayout.VERTICAL);
+        outer.setBackgroundColor(C_BG);
+        if (stripOn) {
+            strip = new TextView(this);
+            strip.setTextColor(C_TEXT);
+            strip.setTextSize(15);
+            strip.setTypeface(Typeface.DEFAULT_BOLD);
+            strip.setGravity(Gravity.CENTER_VERTICAL | Gravity.CENTER_HORIZONTAL);
+            strip.setSingleLine(true);
+            strip.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+            strip.setBackgroundColor(C_LIGHT);
+            strip.setPadding(dp(8), 0, dp(8), 0);
+            strip.setText(stripText.isEmpty() ? "-" : stripText);
+            outer.addView(strip, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, dp(32)));
+        } else {
+            strip = null;
+        }
+        outer.addView(buildKeys(), new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        return outer;
+    }
+
+    private View buildKeys() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.HORIZONTAL);
         root.setBackgroundColor(C_BG);
@@ -239,6 +290,13 @@ public class KeyboardService extends InputMethodService {
             }
         }), lp(ViewGroup.LayoutParams.MATCH_PARENT, h, 0f));
 
+        root.addView(makeKey(stripOn ? "BANDEAU : ACTIVE (toucher pour masquer)"
+                        : "BANDEAU : MASQUE (toucher pour afficher)",
+                C_LIGHT, C_LIGHT_SH, C_TEXT, 14, () -> {
+                    setStripOn(!stripOn);
+                    setInputView(buildOptions());
+                }), lp(ViewGroup.LayoutParams.MATCH_PARENT, h, 0f));
+
         root.addView(makeKey("\u2190 RETOUR", C_TEAL, C_TEAL_SH, 0xFFFFFFFF, 15,
                 () -> setInputView(buildMain())),
                 lp(ViewGroup.LayoutParams.MATCH_PARENT, h, 0f));
@@ -317,5 +375,6 @@ public class KeyboardService extends InputMethodService {
         super.onStartInputView(info, restarting);
         autoHandler.removeCallbacks(autoSubmit);
         buf.setLength(0);
+        if (stripOn && ScanService.instance != null) ScanService.instance.refreshStrip();
     }
 }
