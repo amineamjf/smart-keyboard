@@ -226,9 +226,14 @@ public class KeyboardService extends InputMethodService {
             imm.showInputMethodPicker();
         }), lp(ViewGroup.LayoutParams.MATCH_PARENT, h, 0f));
 
-        root.addView(makeKey("Importer Excel  (bientot)", C_LIGHT, C_LIGHT_SH, C_TEXT, 15, () ->
-                Toast.makeText(this, "Pas encore disponible", Toast.LENGTH_SHORT).show()),
-                lp(ViewGroup.LayoutParams.MATCH_PARENT, h, 0f));
+        root.addView(makeKey("AUTO  demarrer l'automatisation", C_GREEN, C_GREEN_SH, 0xFFFFFFFF, 15, () -> {
+            if (ScanService.instance == null) {
+                Toast.makeText(this, "Service Releve Scan inactif", Toast.LENGTH_SHORT).show();
+            } else {
+                setInputView(buildMain());
+                ScanService.instance.startAuto();
+            }
+        }), lp(ViewGroup.LayoutParams.MATCH_PARENT, h, 0f));
 
         root.addView(makeKey("\u2190  RETOUR", C_TEAL, C_TEAL_SH, 0xFFFFFFFF, 15,
                 () -> setInputView(buildMain())),
