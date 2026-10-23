@@ -35,6 +35,10 @@ public class KeyboardService extends InputMethodService {
         if (buf.length() > 0 && ScanService.instance != null) press("OK");
     };
 
+    // Affichage automatique du clavier (retour de l'appareil photo, etc.)
+    private boolean searching = false;
+    private final Handler showHandler = new Handler(Looper.getMainLooper());
+
     // Couleurs
     private static final int C_BG = 0xFFE4E7EF;
     private static final int C_KEY = 0xFFDDE0E8;
@@ -74,7 +78,7 @@ public class KeyboardService extends InputMethodService {
         return ok;
     }
 
-    // ---------- Outils de dessin ----------
+    // ---------- Outils de design ----------
 
     private int dp(float v) {
         return (int) (v * getResources().getDisplayMetrics().density + 0.5f);
@@ -187,7 +191,7 @@ public class KeyboardService extends InputMethodService {
         right.addView(makeKey(valider, C_GREEN, C_GREEN_SH, 0xFFFFFFFF, 13,
                 () -> press("OK")), lp(ViewGroup.LayoutParams.MATCH_PARENT, 0, 2f));
 
-        right.addView(makeKey("\uD83D\uDD0D  RECHERCHER", C_TEAL, C_TEAL_SH, 0xFFFFFFFF, 12,
+        right.addView(makeKey("\uD83D\uDD0D RECHERCHER", C_TEAL, C_TEAL_SH, 0xFFFFFFFF, 12,
                 () -> search()), lp(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         LinearLayout mid = new LinearLayout(this);
@@ -220,22 +224,22 @@ public class KeyboardService extends InputMethodService {
         root.setPadding(dp(6), dp(6), dp(6), dp(6));
 
         int h = dp(60);
-        root.addView(makeKey("ABC   Changer de clavier", C_LIGHT, C_LIGHT_SH, C_TEXT, 15, () -> {
+        root.addView(makeKey("ABC Changer de clavier", C_LIGHT, C_LIGHT_SH, C_TEXT, 15, () -> {
             InputMethodManager imm =
                     (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
             imm.showInputMethodPicker();
         }), lp(ViewGroup.LayoutParams.MATCH_PARENT, h, 0f));
 
-        root.addView(makeKey("AUTO  demarrer l'automatisation", C_GREEN, C_GREEN_SH, 0xFFFFFFFF, 15, () -> {
+        root.addView(makeKey("AUTO demarrer l'automatisation", C_GREEN, C_GREEN_SH, 0xFFFFFFFF, 15, () -> {
             if (ScanService.instance == null) {
-                Toast.makeText(this, "Service Releve Scan inactif", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Service d'accessibilite desactive", Toast.LENGTH_SHORT).show();
             } else {
                 setInputView(buildMain());
                 ScanService.instance.startAuto();
             }
         }), lp(ViewGroup.LayoutParams.MATCH_PARENT, h, 0f));
 
-        root.addView(makeKey("\u2190  RETOUR", C_TEAL, C_TEAL_SH, 0xFFFFFFFF, 15,
+        root.addView(makeKey("\u2190 RETOUR", C_TEAL, C_TEAL_SH, 0xFFFFFFFF, 15,
                 () -> setInputView(buildMain())),
                 lp(ViewGroup.LayoutParams.MATCH_PARENT, h, 0f));
         return root;
@@ -245,9 +249,11 @@ public class KeyboardService extends InputMethodService {
 
     private void search() {
         if (ScanService.instance == null) {
-            Toast.makeText(this, "Service Releve Scan inactif", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Service d'accessibilite desactive", Toast.LENGTH_SHORT).show();
             return;
         }
+        searching = true;
+        showHandler.postDelayed(() -> searching = false, 4000);
         requestHideSelf(0);
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             if (ScanService.instance != null) ScanService.instance.goSearch();
@@ -272,11 +278,11 @@ public class KeyboardService extends InputMethodService {
         } else if (k.equals("OK")) {
             String v = buf.toString();
             ClipboardManager cm =
-                (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                    (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
             cm.setPrimaryClip(ClipData.newPlainText("index", v));
             if (v.length() > 0) {
                 if (ScanService.instance == null) {
-                    Toast.makeText(this, "Service Releve Scan inactif", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, "Service d'accessibilite desactive", Toast.LENGTH_SHORT).show();
                 } else {
                     ScanService.instance.submit(v);
                 }
@@ -285,6 +291,24 @@ public class KeyboardService extends InputMethodService {
             ic.commitText(k, 1);
             buf.append(k);
             autoHandler.postDelayed(autoSubmit, AUTO_DELAY_MS);
+        }
+    }
+
+    @Override
+    public boolean onEvaluateInputViewShown() {
+        super.onEvaluateInputViewShown();
+        return true;
+    }
+
+    // Quand un champ texte prend le focus (ex. retour de l'appareil photo),
+    // on demande l'affichage du clavier, sauf pendant le flux Recherche.
+    @Override
+    public void onStartInput(EditorInfo attribute, boolean restarting) {
+        super.onStartInput(attribute, restarting);
+        if (!searching && attribute != null && attribute.inputType != 0) {
+            showHandler.postDelayed(() -> {
+                if (!searching && !isInputViewShown()) requestShowSelf(0);
+            }, 400);
         }
     }
 
