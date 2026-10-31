@@ -1,0 +1,644 @@
+package com.smartkeyboard.releve;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
+import java.math.BigDecimal;
+import java.text.Normalizer;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+
+/** Tableau des compteurs importe depuis Excel / CSV, avec l'etat de chaque ligne. */
+public final class Meters {
+
+    public static final int NEW = 0;      // pas encore vu
+    public static final int SIM = 1;      // simulation: aurait ete envoye
+    public static final int SENT = 2;     // envoye
+    public static final int EXTRA = 3;    // absent du tableau (vu sur l'ecran)
+    public static final int NODATA = 4;   // rien a envoyer
+    public static final int PHOTO = 5;    // photo requise, saute
+    public static final int SUSPECT = 6;  // index suspect, non envoye
+    public static final int UNKNOWN = 7;  // anomalie / annotation inconnue
+    public static final int ERROR = 8;    // erreur, automatisation arretee
+    public static final int UNLISTED = 9; // compteur non repertorie (ajoute a la main)
+
+    public static final class Row {
+        public String compteur = "";
+        public String key = "";
+        public String client = "";
+        public String contrat = "";
+        public String oldIdx = "";
+        public String newIdx = "";
+        public String anomaly = "";
+        public String annotation = "";
+        public String note = "";
+        public int status = NEW;
+        public boolean extra = false;
+        public String[] cols = new String[0]; // cellules d'origine du fichier importe
+        public String warn = "";             // ex: compteur different du tableau (remplace)
+        public String tournee = "";          // tournee (compteurs non repertories)
+        public String added = "";            // date d'ajout (compteurs non repertories)
+        public String photos = "";           // noms des copies de photos (Pictures/Releve)
+        public String address = "";          // adresse lue sur l'ecran de l'application d'origine
+    }
+
+    /** En-tetes du fichier importe (pour retrouver nom, adresse, contrat...). */
+    public static String[] HEADS = new String[0];
+
+    // Listes sures entre threads: l'import tourne en arriere-plan pendant que l'ecran se rafraichit
+    public static final java.util.concurrent.CopyOnWriteArrayList<Row> ROWS =
+            new java.util.concurrent.CopyOnWriteArrayList<>();
+    public static int lastDup = 0;
+    /** Derniere tournee vue (lue dans la colonne Tournee du fichier importe). */
+    public static String lastTournee = "";
+    private static final java.util.concurrent.ConcurrentHashMap<String, Row> MAP =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    private Meters() {
+    }
+
+    // ---------- Normalisation ----------
+
+    /** Majuscules, sans accents, lettres et chiffres separes par un espace. */
+    public static String norm(String s) {
+        if (s == null) return "";
+        String t = Normalizer.normalize(s, Normalizer.Form.NFD).replaceAll("\\p{M}+", "");
+        t = t.toUpperCase(Locale.ROOT);
+        return t.replaceAll("[^A-Z0-9]+", " ").trim();
+    }
+
+    /** Cle de comparaison: lettres et chiffres seulement. */
+    public static String key(String s) {
+        String k = norm(s).replace(" ", "");
+        // les zeros du debut ne comptent pas: "000123" et "123" sont le meme compteur
+        int i = 0;
+        while (i < k.length() - 1 && k.charAt(i) == '0') i++;
+        return k.substring(i);
+    }
+
+    /** Enleve le numero au debut ("03-LOCAL INHABITE" devient "LOCAL INHABITE"). */
+    public static String stripCode(String normalized) {
+        return normalized.replaceFirst("^\\d{1,3} ", "");
+    }
+
+    public static boolean noAnomaly(String s) {
+        String n = norm(s);
+        return n.isEmpty() || n.equals("RAS") || n.equals("AUCUNE")
+                || stripCode(n).equals("RELEVE SANS ANOMALIE");
+    }
+
+    public static boolean noAnnotation(String s) {
+        String n = norm(s);
+        return n.isEmpty() || n.equals("RAS") || n.equals("AUCUNE")
+                || n.equals("AUCUNE ANNOTATION");
+    }
+
+    public static boolean isLocalInhabite(String s) {
+        return stripCode(norm(s)).equals("LOCAL INHABITE");
+    }
+
+    /** Nettoie un nombre venant d'Excel: 1321.0 devient 1321, 5.2E11 devient 520000000000. */
+    public static String cleanNumber(String s) {
+        if (s == null) return "";
+        String t = s.replace(' ', ' ').trim();
+        if (t.isEmpty()) return "";
+        try {
+            if (t.matches("[-+]?\\d+(\\.\\d+)?[eE][-+]?\\d+")) {
+                t = new BigDecimal(t).toPlainString();
+            }
+        } catch (Exception ignored) {
+        }
+        if (t.matches("[-+]?\\d+\\.0+")) t = t.substring(0, t.indexOf('.'));
+        return t;
+    }
+
+    private static final HashMap<String, String> ALIAS = new HashMap<>();
+
+    static {
+        ALIAS.put("INACCESSIBLE", "COMPTEUR NON ACCESSIBL");
+        ALIAS.put("LOCAL INABITIE", "LOCAL INHABITE");
+        ALIAS.put("LOCAL INHABITIE", "LOCAL INHABITE");
+        ALIAS.put("LOCAL INABITE", "LOCAL INHABITE");
+        ALIAS.put("COMPTEUR INACCESSIBLE", "COMPTEUR NON ACCESSIBL");
+        ALIAS.put("BLOQUE", "COMPTEUR BLOQUE");
+        ALIAS.put("INTROUVABLE", "COMPTEUR INTROUVABLE");
+        ALIAS.put("ILLISIBLE", "COMPTEUR ILLISIBLE");
+        ALIAS.put("DEFECTUEUX", "COMPTEUR DEFECTUEUX");
+    }
+
+    /**
+     * Cherche dans la liste des choix visibles celui qui correspond au texte du tableau.
+     * Retourne -1 s'il n'y a pas de correspondance sure (aucune ou plusieurs).
+     */
+    private static String codeOf(String normalized) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("^(\\d{1,3}) ").matcher(normalized);
+        return m.find() ? m.group(1) : "";
+    }
+
+    private static String firstWord(String s) {
+        int i = s.indexOf(' ');
+        return i < 0 ? s : s.substring(0, i);
+    }
+
+    public static int bestMatch(List<String> options, String excel) {
+        String e = stripCode(norm(excel));
+        if (e.isEmpty()) return -1;
+        // Meme numero de code (ex: 03-...) et meme premier mot: on accepte meme si l'orthographe differe
+        String ec = codeOf(norm(excel));
+        if (!ec.isEmpty()) {
+            int hit = -1, n = 0;
+            for (int i = 0; i < options.size(); i++) {
+                String on = norm(options.get(i));
+                if (codeOf(on).equals(ec) && firstWord(stripCode(on)).equals(firstWord(e))) {
+                    hit = i;
+                    n++;
+                }
+            }
+            if (n == 1) return hit;
+        }
+        String alias = ALIAS.get(e);
+        if (alias != null) e = alias;
+        int found = -1;
+        int count = 0;
+        for (int i = 0; i < options.size(); i++) {
+            String o = stripCode(norm(options.get(i)));
+            if (o.equals(e)) {
+                found = i;
+                count++;
+            }
+        }
+        if (count == 1) return found;
+        if (count > 1) return -1;
+        for (int i = 0; i < options.size(); i++) {
+            String o = stripCode(norm(options.get(i)));
+            int mn = Math.min(o.length(), e.length());
+            if (mn >= 12 && (o.startsWith(e) || e.startsWith(o))) {
+                found = i;
+                count++;
+            }
+        }
+        return count == 1 ? found : -1;
+    }
+
+    // ---------- Acces au tableau ----------
+
+    public static Row find(String key) {
+        return key == null ? null : MAP.get(key);
+    }
+
+    /**
+     * Informations lues sur l'ecran de l'application d'origine pour chaque compteur vu
+     * (nom, adresse, contrat, ancien index): sert a completer le rapport Excel.
+     */
+    public static final java.util.concurrent.ConcurrentHashMap<String, String[]> SEEN =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** Complete les cellules vides d'une ligne avec les infos lues a l'ecran {nom, adresse, contrat, ancien}. */
+    public static void fillGaps(Row r, String[] inf) {
+        if (r == null || inf == null || inf.length < 4) return;
+        if (r.client.isEmpty() && !inf[0].isEmpty()) r.client = inf[0];
+        if (r.address.isEmpty() && !inf[1].isEmpty() && colValue(r, "ADRESSE*", "ADR*", "RUE*", "LIEU*").isEmpty()) {
+            r.address = inf[1];
+        }
+        if (r.contrat.isEmpty() && !inf[2].isEmpty() && colValue(r, "CONTRAT*", "N CONTRAT*", "POLICE*").isEmpty()) {
+            r.contrat = inf[2];
+        }
+        if (r.oldIdx.isEmpty() && inf[3].matches("\\d{1,9}")) r.oldIdx = inf[3];
+    }
+
+    /** Un compteur remplace garde sa ligne (ordre, ancien index): on change seulement son numero. */
+    public static void rekey(Row r, String newKey, String newDisplay) {
+        MAP.remove(r.key);
+        r.key = newKey;
+        r.compteur = newDisplay;
+        MAP.put(newKey, r);
+    }
+
+    public static Row addExtra(String display, String key) {
+        Row r = new Row();
+        r.compteur = display;
+        r.key = key;
+        r.extra = true;
+        r.status = EXTRA;
+        r.note = "absent du tableau";
+        fillGaps(r, SEEN.get(key));
+        ROWS.add(r);
+        MAP.put(key, r);
+        return r;
+    }
+
+    /** Tournee d'une ligne, lue dans la colonne Tournee du fichier importe. */
+    /** Tournees choisies pour la journee (vide = toutes). */
+    public static final java.util.Set<String> ACTIVE_T = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    public static boolean isActive(Row r) {
+        if (ACTIVE_T.isEmpty() || r == null) return true;
+        return ACTIVE_T.contains(tourneeOf(r).trim());
+    }
+
+    /** Liste triee des tournees presentes dans le tableau. */
+    public static java.util.ArrayList<String> distinctTournees() {
+        java.util.TreeSet<String> t = new java.util.TreeSet<>();
+        for (Row r : ROWS) {
+            String x = tourneeOf(r).trim();
+            if (!x.isEmpty()) t.add(x);
+        }
+        return new java.util.ArrayList<>(t);
+    }
+
+    public static String tourneeOf(Row r) {
+        if (r == null) return "";
+        if (!r.tournee.isEmpty()) return r.tournee;
+        return colValue(r, "TOURNEE*", "TOURNE*", "N TOURNEE*", "NUM TOURNEE*", "CODE TOURNEE*",
+                "SECTEUR*");
+    }
+
+    /** Ajoute un compteur absent de l'application d'origine (sans anomalie). */
+    public static Row addUnlisted(String compteur, String idx, String tournee) {
+        Row r = new Row();
+        r.compteur = compteur.trim();
+        r.key = key(r.compteur);
+        r.newIdx = cleanNumber(idx);
+        r.tournee = tournee == null ? "" : tournee.trim();
+        r.added = new java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.FRANCE)
+                .format(new java.util.Date());
+        r.status = UNLISTED;
+        r.note = "non r\u00E9pertori\u00E9 (absent de l'application)";
+        ROWS.add(r);
+        MAP.put(r.key, r);
+        if (!r.tournee.isEmpty()) lastTournee = r.tournee;
+        return r;
+    }
+
+    public static void remove(Row r) {
+        ROWS.remove(r);
+        if (MAP.get(r.key) == r) MAP.remove(r.key);
+    }
+
+    public static void resetStatuses() {
+        for (int i = ROWS.size() - 1; i >= 0; i--) {
+            Row r = ROWS.get(i);
+            if (r.status == UNLISTED) continue;
+            if (r.extra) {
+                MAP.remove(r.key);
+                ROWS.remove(i);
+            } else {
+                r.status = NEW;
+                r.note = "";
+                r.photos = "";
+            }
+        }
+    }
+
+    public static int[] counts() {
+        int[] c = new int[10];
+        for (Row r : ROWS) c[r.status]++;
+        return c;
+    }
+
+    public static int count(int status) {
+        int n = 0;
+        for (Row r : ROWS) if (r.status == status) n++;
+        return n;
+    }
+
+    public static String statusLabel(int s) {
+        switch (s) {
+            case SIM: return "Simule";
+            case SENT: return "Envoye";
+            case EXTRA: return "Absent du tableau";
+            case NODATA: return "Sans donnee";
+            case PHOTO: return "Photo requise";
+            case SUSPECT: return "Index suspect";
+            case UNKNOWN: return "Choix inconnu";
+            case ERROR: return "Erreur";
+            case UNLISTED: return "Non r\u00E9pertori\u00E9";
+            default: return "Non vu";
+        }
+    }
+
+    // ---------- Import ----------
+
+    private static int colOf(String[] header, String... names) {
+        for (int i = 0; i < header.length; i++) {
+            String n = norm(header[i]);
+            for (String want : names) {
+                if (want.endsWith("*")) {
+                    if (n.startsWith(want.substring(0, want.length() - 1))) return i;
+                } else if (n.equals(want)) {
+                    return i;
+                }
+            }
+        }
+        return -1;
+    }
+
+    public static String lastReport = "";
+
+    private static String cName(String[] head, int c) {
+        return c < 0 || c >= head.length ? "INTROUVABLE" : "'" + (head[c] == null ? "" : head[c].trim()) + "'";
+    }
+
+    private static String cell(String[] row, int c) {
+        if (c < 0 || c >= row.length || row[c] == null) return "";
+        return row[c].trim();
+    }
+
+    /** Remplace le tableau par le contenu des feuilles. Retourne le nombre de lignes. */
+    public static int importSheets(List<List<String[]>> sheets) throws Exception {
+        for (List<String[]> rows : sheets) {
+            for (int h = 0; h < rows.size() && h < 30; h++) {
+                String[] head = rows.get(h);
+                int cCompteur = colOf(head, "N COMPTEUR", "COMPTEUR", "NUM COMPTEUR");
+                if (cCompteur < 0) continue;
+                int cNew = colOf(head, "NOUVEL INDEX*", "NOUVEAU INDEX*", "INDEX NOUVEAU*",
+                        "INDEX NOUVEL*", "INDEX ACTUEL*", "INDEX RELEVE*", "NEW INDEX*", "NOUV INDEX*");
+                int cOld = colOf(head, "ANCIEN INDEX*", "INDEX ANCIEN*", "ANC INDEX*",
+                        "INDEX PRECEDENT*", "DERNIER INDEX*", "OLD INDEX*", "PREV INDEX*",
+                        "ENCIEN INDEX*", "ANSIEN INDEX*", "ANCIN INDEX*", "ANCIAN INDEX*");
+                int cAno = colOf(head, "ANOMALIE");
+                int cAnn = colOf(head, "ANNOTATION");
+                int cCli = colOf(head, "CLIENT", "NOM DU CLIENT*", "NOM CLIENT*", "NOM*");
+                int cCon = colOf(head, "N CLIENT*", "N CONTRAT*", "NUM CONTRAT*", "CONTRAT*");
+                HEADS = new String[head.length];
+                for (int j = 0; j < head.length; j++) HEADS[j] = head[j] == null ? "" : head[j].trim();
+                ArrayList<Row> tmpRows = new ArrayList<>();
+                HashMap<String, Row> tmpMap = new HashMap<>();
+                int dup = 0;
+                for (int i = h + 1; i < rows.size(); i++) {
+                    String[] row = rows.get(i);
+                    String comp = cell(row, cCompteur);
+                    String k = key(comp);
+                    if (k.isEmpty()) continue;
+                    if (tmpMap.containsKey(k)) {
+                        dup++;
+                        continue;
+                    }
+                    Row r = new Row();
+                    r.compteur = comp;
+                    r.key = k;
+                    r.client = cell(row, cCli);
+                    r.contrat = cell(row, cCon);
+                    r.oldIdx = cleanNumber(cell(row, cOld));
+                    r.newIdx = cleanNumber(cell(row, cNew));
+                    r.anomaly = cell(row, cAno);
+                    r.annotation = cell(row, cAnn);
+                    r.cols = new String[row.length];
+                    for (int j = 0; j < row.length; j++) r.cols[j] = row[j] == null ? "" : row[j].trim();
+                    tmpRows.add(r);
+                    tmpMap.put(k, r);
+                }
+                if (tmpRows.isEmpty()) throw new Exception("Aucune ligne apres l'en-tete");
+                StringBuilder rp = new StringBuilder();
+                rp.append("Colonnes: compteur=").append(cName(head, cCompteur))
+                        .append(" | ancien=").append(cName(head, cOld))
+                        .append(" | nouvel=").append(cName(head, cNew))
+                        .append(" | client=").append(cName(head, cCli))
+                        .append(" | contrat=").append(cName(head, cCon))
+                        .append(" | anomalie=").append(cName(head, cAno));
+                Row r0 = tmpRows.get(0);
+                rp.append("\n1er compteur: ").append(r0.compteur).append(" ancien=[").append(r0.oldIdx)
+                        .append("] nouvel=[").append(r0.newIdx).append("]");
+                if (cOld < 0 || cNew < 0) {
+                    rp.append("\nATTENTION: colonne(s) introuvable(s). En-tetes du fichier: ");
+                    for (int j = 0; j < head.length && j < 30; j++) {
+                        rp.append(j > 0 ? " ; " : "").append(head[j] == null ? "" : head[j].trim());
+                    }
+                }
+                lastReport = rp.toString();
+                // les compteurs non repertories ajoutes a la main survivent a un nouvel import
+                ArrayList<Row> keep = new ArrayList<>();
+                for (Row u : ROWS) if (u.status == UNLISTED && !tmpMap.containsKey(u.key)) keep.add(u);
+                for (Row u : keep) {
+                    tmpRows.add(u);
+                    tmpMap.put(u.key, u);
+                }
+                ROWS.clear();
+                MAP.clear();
+                ROWS.addAll(tmpRows);
+                MAP.putAll(tmpMap);
+                lastDup = dup;
+                return ROWS.size();
+            }
+        }
+        throw new Exception("Colonne 'N° Compteur' introuvable");
+    }
+
+    // ---------- Sauvegarde ----------
+
+    private static String clean(String s) {
+        return s == null ? "" : s.replace('\t', ' ').replace('\n', ' ').replace('\r', ' ');
+    }
+
+    private static String joinCells(String[] a) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; a != null && i < a.length; i++) {
+            if (i > 0) sb.append('\u0001');
+            sb.append(clean(a[i]).replace('\u0001', ' '));
+        }
+        return sb.toString();
+    }
+
+    private static String[] splitCells(String s) {
+        if (s == null || s.isEmpty()) return new String[0];
+        return s.split("\u0001", -1);
+    }
+
+    public static synchronized void save(File f) {
+        File tmp = new File(f.getPath() + ".tmp");
+        try (Writer w = new java.io.BufferedWriter(new OutputStreamWriter(new FileOutputStream(tmp), "UTF-8"), 65536)) {
+            w.write("#H\t" + joinCells(HEADS) + "\n");
+            w.write("#T\t" + clean(lastTournee) + "\n");
+            for (Row r : ROWS) {
+                w.write(clean(r.compteur) + "\t" + clean(r.client) + "\t" + clean(r.contrat) + "\t"
+                        + clean(r.oldIdx) + "\t" + clean(r.newIdx) + "\t" + clean(r.anomaly) + "\t"
+                        + clean(r.annotation) + "\t" + r.status + "\t" + clean(r.note) + "\t"
+                        + (r.extra ? "1" : "0") + "\t" + joinCells(r.cols) + "\t" + clean(r.warn) + "\t"
+                        + clean(r.tournee) + "\t" + clean(r.added) + "\t" + clean(r.photos) + "\t"
+                        + clean(r.address) + "\n");
+            }
+            w.flush();
+            w.close();
+            if (!tmp.renameTo(f)) {
+                f.delete();
+                tmp.renameTo(f);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    public static void load(File f) {
+        if (!f.exists()) {
+            ROWS.clear();
+            MAP.clear();
+            return;
+        }
+        ArrayList<Row> tmpRows = new ArrayList<>();
+        HashMap<String, Row> tmpMap = new HashMap<>();
+        try (BufferedReader br = new BufferedReader(
+                new InputStreamReader(new FileInputStream(f), "UTF-8"))) {
+            String line;
+            HEADS = new String[0];
+            while ((line = br.readLine()) != null) {
+                String[] p = line.split("\t", -1);
+                if (p.length >= 2 && p[0].equals("#H")) {
+                    HEADS = splitCells(p[1]);
+                    continue;
+                }
+                if (p.length >= 2 && p[0].equals("#T")) {
+                    lastTournee = p[1];
+                    continue;
+                }
+                if (p.length < 10) continue;
+                Row r = new Row();
+                r.compteur = p[0];
+                r.key = key(p[0]);
+                r.client = p[1];
+                r.contrat = p[2];
+                r.oldIdx = p[3];
+                r.newIdx = p[4];
+                r.anomaly = p[5];
+                r.annotation = p[6];
+                try {
+                    r.status = Integer.parseInt(p[7]);
+                } catch (Exception e) {
+                    r.status = NEW;
+                }
+                r.note = p[8];
+                r.extra = "1".equals(p[9]);
+                if (p.length > 10) r.cols = splitCells(p[10]);
+                if (p.length > 11) r.warn = p[11];
+                if (p.length > 12) r.tournee = p[12];
+                if (p.length > 13) r.added = p[13];
+                if (p.length > 14) r.photos = p[14];
+                if (p.length > 15) r.address = p[15];
+                tmpRows.add(r);
+                tmpMap.put(r.key, r);
+            }
+        } catch (Exception ignored) {
+        }
+        ROWS.clear();
+        MAP.clear();
+        ROWS.addAll(tmpRows);
+        MAP.putAll(tmpMap);
+    }
+
+    /** Valeur d'une colonne du fichier d'origine, retrouvee par son en-tete (noms avec * = debut). */
+    public static String colValue(Row r, String... names) {
+        if (r == null || r.cols == null) return "";
+        for (String want : names) {
+            for (int i = 0; i < HEADS.length && i < r.cols.length; i++) {
+                String n = norm(HEADS[i]);
+                boolean ok = want.endsWith("*") ? n.startsWith(want.substring(0, want.length() - 1))
+                        : n.equals(want);
+                if (ok && r.cols[i] != null && !r.cols[i].trim().isEmpty()) return r.cols[i].trim();
+            }
+        }
+        return "";
+    }
+
+    public static String nameOf(Row r) {
+        if (!r.client.isEmpty()) return r.client;
+        return colValue(r, "NOM*", "CLIENT*", "TITULAIRE*", "ABONNE*", "RAISON*");
+    }
+
+    public static String addressOf(Row r) {
+        String a = colValue(r, "ADRESSE*", "ADR*", "RUE*", "LIEU*", "LOCALISATION*");
+        return a.isEmpty() ? r.address : a;
+    }
+
+    /** Coordonnees GPS {latitude, longitude} lues dans la colonne GPS du fichier, ou null. */
+    public static String[] gpsOf(Row r) {
+        String g = colValue(r, "GPS*", "COORD*", "POSITION*");
+        if (g.isEmpty()) return null;
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("(-?\\d{1,3}(?:[.,]\\d+)?)\\s*[,; ]\\s*(-?\\d{1,3}(?:[.,]\\d+)?)").matcher(g);
+        if (!m.find()) return null;
+        String a = m.group(1).replace(',', '.'), b = m.group(2).replace(',', '.');
+        try {
+            double la = Double.parseDouble(a), lo = Double.parseDouble(b);
+            if (Math.abs(la) > 90 || Math.abs(lo) > 180 || (la == 0 && lo == 0)) return null;
+        } catch (Exception e) {
+            return null;
+        }
+        return new String[]{a, b};
+    }
+
+    private static java.util.HashSet<String> tokens(String s) {
+        java.util.HashSet<String> t = new java.util.HashSet<>();
+        for (String w : norm(s).split(" ")) if (w.length() > 0) t.add(w);
+        return t;
+    }
+
+    private static final java.util.concurrent.ConcurrentHashMap<Row, Object[]> TOK =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** Mots du nom du client pour une ligne (mis en cache: le tableau peut avoir 6000+ lignes). */
+    @SuppressWarnings("unchecked")
+    private static java.util.HashSet<String> rowTokens(Row r) {
+        String nm = nameOf(r);
+        Object[] e = TOK.get(r);
+        if (e != null && nm.equals(e[0])) return (java.util.HashSet<String>) e[1];
+        java.util.HashSet<String> t = tokens(nm);
+        TOK.put(r, new Object[]{nm, t});
+        return t;
+    }
+
+    private static boolean sameTokens(java.util.HashSet<String> a, java.util.HashSet<String> b) {
+        return !a.isEmpty() && a.equals(b);
+    }
+
+    private static double overlap(java.util.HashSet<String> a, java.util.HashSet<String> b) {
+        if (a.isEmpty() || b.isEmpty()) return 0;
+        int n = 0;
+        for (String x : a) if (b.contains(x)) n++;
+        return (double) n / Math.min(a.size(), b.size());
+    }
+
+    /** Cherche un compteur du tableau par nom du client (et adresse si plusieurs): compteur remplace. */
+    public static Row findByName(String name, String addr) {
+        if (name == null || name.trim().isEmpty()) return null;
+        java.util.HashSet<String> tn = tokens(name);
+        if (tn.size() < 2) return null;
+        ArrayList<Row> cand = new ArrayList<>();
+        for (Row r : ROWS) {
+            if (r.extra) continue;
+            if (sameTokens(tn, rowTokens(r))) cand.add(r);
+        }
+        if (cand.size() == 1) return cand.get(0);
+        if (cand.size() > 1 && addr != null && !addr.trim().isEmpty()) {
+            java.util.HashSet<String> ta = tokens(addr);
+            ArrayList<Row> good = new ArrayList<>();
+            for (Row r : cand) if (overlap(ta, tokens(addressOf(r))) >= 0.6) good.add(r);
+            if (good.size() == 1) return good.get(0);
+        }
+        return null;
+    }
+
+    public static String contractOf(Row r) {
+        if (!r.contrat.isEmpty()) return r.contrat;
+        return colValue(r, "CONTRAT*", "N CONTRAT*", "POLICE*", "ABONNEMENT*");
+    }
+
+    private static String q(String s) {
+        return "\"" + (s == null ? "" : s.replace("\"", "\"\"")) + "\"";
+    }
+
+    public static String csv() {
+        StringBuilder sb = new StringBuilder("﻿");
+        sb.append("Compteur;Client;Ancien index;Nouvel index;Anomalie;Annotation;Statut;Note\n");
+        for (Row r : ROWS) {
+            sb.append(q(r.compteur)).append(';').append(q(r.client)).append(';')
+                    .append(q(r.oldIdx)).append(';').append(q(r.newIdx)).append(';')
+                    .append(q(r.anomaly)).append(';').append(q(r.annotation)).append(';')
+                    .append(q(statusLabel(r.status))).append(';').append(q(r.note)).append('\n');
+        }
+        return sb.toString();
+    }
+}
