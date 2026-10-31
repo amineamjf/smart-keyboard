@@ -357,6 +357,9 @@ public class ScanService extends AccessibilityService {
         }
         gotoKey = key;
         gotoPhase = 0;
+        gotoDirect = false;
+        gotoDirectTried = false;
+        gotoStartT = SystemClock.uptimeMillis();
         gotoQuery = suffixFor(key);
         log("ALLER AU COMPTEUR " + key + " (recherche: " + gotoQuery + ")");
         if (!gotoClosed && trySwipe(key)) return;
@@ -643,6 +646,23 @@ public class ScanService extends AccessibilityService {
             KeyboardService k = KeyboardService.instance;
             if (gotoPhase == 1) {
                 AccessibilityNodeInfo box = inApp ? findId(root, "searchInput", 0) : null;
+                if (box != null && !gotoDirectTried) {
+                    // ecriture directe dans la zone de recherche: pas besoin d'attendre le clavier
+                    gotoDirectTried = true;
+                    String dq = gotoQuery.isEmpty() ? gotoKey : gotoQuery;
+                    Bundle da = new Bundle();
+                    da.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, dq);
+                    box.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
+                    boolean dok = box.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, da);
+                    log("ALLER: saisie directe " + dq + " (" + dok + ") apres " + (now - gotoStartT) + " ms");
+                    if (dok) {
+                        gotoDirect = true;
+                        gotoPhase = 2;
+                        gotoT = now;
+                        handler.postDelayed(gotoStep, POLL);
+                        return;
+                    }
+                }
                 if (box != null && k != null && k.typeText(gotoQuery.isEmpty() ? gotoKey : gotoQuery)) {
                     log("ALLER: numero tape " + (gotoQuery.isEmpty() ? gotoKey : gotoQuery));
                     gotoPhase = 2;
@@ -671,12 +691,28 @@ public class ScanService extends AccessibilityService {
                     lastView = true;
                     return;
                 }
+                if (card == null && gotoDirect && inApp && now - gotoT > 900) {
+                    // la saisie directe n'a pas filtre la liste: on revient a la frappe par le clavier
+                    gotoDirect = false;
+                    AccessibilityNodeInfo bx = findId(root, "searchInput", 0);
+                    if (bx != null) {
+                        Bundle ca = new Bundle();
+                        ca.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "");
+                        bx.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, ca);
+                    }
+                    log("ALLER: saisie directe sans effet, frappe par le clavier");
+                    gotoPhase = 1;
+                    gotoT = now;
+                    gotoTries = 0;
+                    handler.postDelayed(gotoStep, POLL);
+                    return;
+                }
                 if (card != null) {
                     boolean ok = tapNode(card);
-                    log("ALLER: carte touchee (" + ok + ")");
+                    log("ALLER: carte touchee (" + ok + ") apres " + (now - gotoStartT) + " ms");
                     gotoPhase = 3;
                     gotoT = now;
-                    handler.postDelayed(gotoStep, d(150));
+                    handler.postDelayed(gotoStep, POLL);
                     return;
                 }
                 if (!gotoQuery.equals(gotoKey) && now - gotoT > 1500 && inApp) {
@@ -705,7 +741,7 @@ public class ScanService extends AccessibilityService {
                     return;
                 }
                 if (inApp && findId(root, "modelInputIdx", 0) != null) {
-                    log("ALLER: ecran du releve ouvert");
+                    log("ALLER: ecran du releve ouvert, total " + (now - gotoStartT) + " ms");
                     following = followDb;
                     followTries = 0;
                     if (k != null) k.showNow();
@@ -1201,6 +1237,8 @@ public class ScanService extends AccessibilityService {
     private static final boolean SYNC_WRITES = false;
     private boolean syncAll = false;
     private int syncEmpty = 0;
+    private boolean gotoDirect = false, gotoDirectTried = false;
+    private long gotoStartT = 0;
     private boolean syncProbed = false;
     private String syncProbeText = "";
     private int syncRows = 0, syncEqNew = 0, syncEqOld = 0, syncEqCon = 0;

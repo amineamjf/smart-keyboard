@@ -23,7 +23,7 @@ import java.util.List;
 
 public class MainActivity extends Activity {
 
-    private static final String VERSION = "Version 71";
+    private static final String VERSION = "Version 72";
     private static final int REQ_IMPORT = 11;
     private TextView out;
     private TextView summary;
