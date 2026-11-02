@@ -1,0 +1,184 @@
+package com.smartkeyboard.releve;
+
+import android.content.ContentResolver;
+import android.database.Cursor;
+import android.net.Uri;
+import android.provider.DocumentsContract;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.InputStreamReader;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+
+/**
+ * Lit (en lecture seule) les journaux TRACE_CLOTURE_RELEVE de l'application d'origine:
+ * chaque ligne contient le numero client, l'heure de cloture et l'index saisi.
+ * On rattache chaque ligne a une ligne du tableau par le numero de contrat/client.
+ * Securite: rien n'est ecrit dans le tableau tant que les index du journal ne concordent pas
+ * avec ceux deja saisis (au moins 5 comparaisons et 80% d'accord).
+ */
+final class LogImport {
+    static final class Result {
+        int lines, clients, matched, unmatched, same, diff, filled, cancels, noIdx, zero, cancelMarked, green, yellow, red;
+        boolean blocked;
+        String msg = "";
+    }
+
+    private static String keyOf(String s) {
+        if (s == null) return "";
+        String d = s.replaceAll("\\D", "");
+        int i = 0;
+        while (i < d.length() - 1 && d.charAt(i) == '0') i++;
+        return d.substring(i);
+    }
+
+    private static boolean sameNum(String a, String b) {
+        if (a == null || b == null) return false;
+        if (!a.matches("\\d{1,9}") || !b.matches("\\d{1,9}")) return false;
+        return Long.parseLong(a) == Long.parseLong(b);
+    }
+
+    /** Lecture d'un dossier "logs" choisi par l'utilisateur. */
+    static Result run(ContentResolver cr, Uri tree, File closedFile) {
+        Result res = new Result();
+        java.util.ArrayList<Uri> uris = new java.util.ArrayList<>();
+        try {
+            String docId = DocumentsContract.getTreeDocumentId(tree);
+            Uri kids = DocumentsContract.buildChildDocumentsUriUsingTree(tree, docId);
+            try (Cursor c = cr.query(kids, new String[]{DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                    DocumentsContract.Document.COLUMN_MIME_TYPE}, null, null, null)) {
+                while (c != null && c.moveToNext()) {
+                    String id = c.getString(0), mime = c.getString(1);
+                    if (DocumentsContract.Document.MIME_TYPE_DIR.equals(mime)) continue;
+                    uris.add(DocumentsContract.buildDocumentUriUsingTree(tree, id));
+                }
+            }
+        } catch (Exception e) {
+            res.blocked = true;
+            res.msg = "Lecture du dossier impossible: " + e.getMessage();
+            return res;
+        }
+        return runFiles(cr, uris, closedFile);
+    }
+
+    /** Lecture d'un ou plusieurs fichiers .txt du journal choisis un par un. */
+    static Result runFiles(ContentResolver cr, java.util.List<Uri> uris, File closedFile) {
+        return runFiles(cr, uris, closedFile, false);
+    }
+
+    /** merge=true: garde les lectures deja connues (lecture automatique sur quelques jours seulement). */
+    static Result runFiles(ContentResolver cr, java.util.List<Uri> uris, File closedFile, boolean merge) {
+        Result res = new Result();
+        LogParse parser = new LogParse();
+        for (Uri u : uris) {
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(cr.openInputStream(u), "UTF-8"))) {
+                String line;
+                while ((line = br.readLine()) != null) parser.addLine(line);
+            } catch (Exception ignored) {
+            }
+        }
+        HashMap<String, String[]> last = parser.resolve();
+        res.lines = parser.lines;
+        res.cancels = parser.cancels;
+        res.noIdx = parser.noIdx;
+        res.clients = last.size();
+        if (last.isEmpty()) {
+            res.blocked = true;
+            res.msg = "Aucune ligne TRACE_CLOTURE_RELEVE trouvee dans ce dossier.";
+            return res;
+        }
+
+        // numero de contrat -> ligne du tableau (ambigu = ignore)
+        HashMap<String, Meters.Row> byContract = new HashMap<>();
+        HashSet<String> dups = new HashSet<>();
+        for (Meters.Row r : Meters.ROWS) {
+            if (r.extra) continue;
+            String k = keyOf(Meters.contractOf(r));
+            if (k.isEmpty()) continue;
+            if (byContract.containsKey(k)) dups.add(k);
+            else byContract.put(k, r);
+        }
+        for (Map.Entry<String, String[]> e : last.entrySet()) {
+            Meters.Row r = dups.contains(e.getKey()) ? null : byContract.get(e.getKey());
+            if (r == null) {
+                res.unmatched++;
+                continue;
+            }
+            res.matched++;
+            if (r.newIdx.matches("\\d{1,9}")) {
+                if (sameNum(r.newIdx, e.getValue()[1])) res.same++;
+                else res.diff++;
+            }
+        }
+        int compared = res.same + res.diff;
+        if (compared < 5 || res.same < 0.8 * compared) {
+            res.blocked = true;
+            res.msg = compared < 5
+                    ? "Pas assez de lignes a comparer (" + compared + ") pour verifier que le journal correspond au tableau: rien n'a ete ecrit."
+                    : "Le journal ne concorde pas avec le tableau (" + res.same + " identiques / " + res.diff
+                    + " differents): rien n'a ete ecrit.";
+            return res;
+        }
+
+        if (!merge) Meters.CLOSED.values().removeIf(c -> !c.note.startsWith("consommation lue"));
+        // lectures annulees dans l'application mais encore presentes dans le tableau: on les signale
+        for (String cc : parser.cancelledClients) {
+            Meters.Row cr0 = dups.contains(cc) ? null : byContract.get(cc);
+            if (cr0 != null && !cr0.newIdx.isEmpty() && !cr0.note.contains("ANNULEE dans l'application")) {
+                cr0.note = "ANNULEE dans l'application (journal)" + (cr0.note.isEmpty() ? "" : " | " + cr0.note);
+                res.cancelMarked++;
+            }
+        }
+        for (Map.Entry<String, String[]> e : last.entrySet()) {
+            String client = e.getKey();
+            String idx = e.getValue()[1];
+            Meters.Row r = dups.contains(client) ? null : byContract.get(client);
+            Meters.Closed cl = new Meters.Closed();
+            cl.key = client;
+            cl.idx = idx;
+            cl.date = e.getValue()[2];
+            if (r == null) {
+                cl.note = "client " + client + " absent du tableau (ou ambigu)";
+            } else {
+                cl.meter = r.compteur;
+                cl.name = r.client;
+                cl.address = r.address;
+                cl.tournee = Meters.tourneeOf(r);
+                if (r.oldIdx.matches("\\d{1,9}") && Long.parseLong(idx) >= Long.parseLong(r.oldIdx)) {
+                    cl.conso = String.valueOf(Long.parseLong(idx) - Long.parseLong(r.oldIdx));
+                }
+                if (r.newIdx.isEmpty() && idx.equals("0") && !r.oldIdx.equals("0")) {
+                    cl.note = "index 0 dans le journal: non ecrit, a verifier";
+                    res.zero++;
+                } else if (r.newIdx.isEmpty()) {
+                    cl.note = "rempli depuis le journal";
+                    r.newIdx = idx;
+                    r.note = "complete depuis le journal de l'application (" + cl.date + ")"
+                            + (r.note.isEmpty() ? "" : " | " + r.note);
+                    if (r.status == Meters.NEW || r.status == Meters.ERROR) r.status = Meters.SENT;
+                    res.filled++;
+                } else if (sameNum(r.newIdx, idx)) {
+                    cl.note = "identique";
+                } else {
+                    cl.note = "different du tableau (tableau: " + r.newIdx + ")";
+                    r.note = "journal de l'application: " + idx + " (non ecrase)"
+                            + (r.note.isEmpty() ? "" : " | " + r.note);
+                }
+            }
+            Meters.CLOSED.put(client, cl);
+        }
+        // avis de vraisemblance sur les lignes rattachees
+        java.util.HashMap<String, Long> med = Verdict.medians(Meters.ROWS);
+        for (Map.Entry<String, String[]> e : last.entrySet()) {
+            Meters.Row r = dups.contains(e.getKey()) ? null : byContract.get(e.getKey());
+            if (r == null) continue;
+            int v = Verdict.judge(r, med, ScanService.maxJump, ScanService.maxDrop);
+            if (v == Verdict.OK) res.green++;
+            else if (v == Verdict.HIGH || v == Verdict.ZERO) res.yellow++;
+            else if (v == Verdict.OUT || v == Verdict.NEG) res.red++;
+        }
+        Meters.saveClosed(closedFile);
+        return res;
+    }
+}
