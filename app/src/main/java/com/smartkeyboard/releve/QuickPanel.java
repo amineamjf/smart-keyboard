@@ -289,7 +289,7 @@ final class QuickPanel extends LinearLayout {
         });
         LinearLayout.LayoutParams ol = glowApp ? w(0, -1, 1.3f) : w(dp(62), -1, 0f);
         ol.setMargins(dp(6), 0, 0, 0);
-        acts.addView(open, ol);
+        if (st != QuickLogic.S_CLOSED) acts.addView(open, ol);
         if (glowApp) {
             GradientDrawable og = shape(0xFF1DB954, 12);
             og.setStroke(dp(3), 0xFF9BFFC4);   // halo vert
@@ -331,7 +331,18 @@ final class QuickPanel extends LinearLayout {
         host.saved("\u2713 " + sel.compteur + " : " + sel.newIdx + " enregistr\u00E9", sel, placeAfter);
     }
 
+    private View padCache = null;
+
     private View pad() {
+        if (padCache != null) {
+            if (padCache.getParent() instanceof ViewGroup) ((ViewGroup) padCache.getParent()).removeView(padCache);
+            return padCache;
+        }
+        padCache = buildPad();
+        return padCache;
+    }
+
+    private View buildPad() {
         LinearLayout col = new LinearLayout(getContext());
         col.setOrientation(VERTICAL);
         String[][] keys = {{"1", "2", "3"}, {"4", "5", "6"}, {"7", "8", "9"}, {"\u232B", "0", "C"}};
