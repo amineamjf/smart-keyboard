@@ -221,6 +221,7 @@ final class QuickPanel extends LinearLayout {
         dl.setMargins(0, dp(6), 0, 0);
         col.addView(disp, dl);
 
+        final boolean inApp = !Meters.isOffApp(sel) && sel.status != Meters.NODATA;
         final TextView chk = tv((placeAfter ? "\u2611 " : "\u2610 ") + "Apr\u00E8s le dernier compteur lu", 12, cText, false);
         chk.setPadding(dp(4), dp(6), 0, dp(4));
         chk.setClickable(true);
@@ -231,7 +232,14 @@ final class QuickPanel extends LinearLayout {
                 rebuild();
             }
         });
-        col.addView(chk, w(-1, -2, 0f));
+        if (inApp) {
+            TextView hint = tv("\u2714 Ce compteur est dans l'application : ouvrez-le avec App \u2197 et saisissez l'index l\u00E0-bas.",
+                    12, cGreen, true);
+            hint.setPadding(dp(4), dp(6), 0, dp(4));
+            col.addView(hint, w(-1, -2, 0f));
+        } else {
+            col.addView(chk, w(-1, -2, 0f));
+        }
 
         if (confirmLower) {
             TextView warn = tv("\u26A0 Inf\u00E9rieur \u00E0 l'ancien index. Appuyez encore sur Enregistrer pour confirmer.",
@@ -241,26 +249,56 @@ final class QuickPanel extends LinearLayout {
         }
         LinearLayout acts = new LinearLayout(getContext());
         acts.setOrientation(HORIZONTAL);
-        TextView save = button(confirmLower ? "Confirmer" : "Enregistrer", confirmLower ? cAmber : cGreen, 0xFFFFFFFF, 15,
+        TextView save = button(confirmLower ? "Confirmer" : "Enregistrer",
+                confirmLower ? cAmber : (inApp ? 0xFFF4F5F7 : cGreen),
+                confirmLower ? 0xFFFFFFFF : (inApp ? 0xFF14161B : 0xFFFFFFFF), inApp ? 13 : 15,
                 new Runnable() {
                     @Override
                     public void run() {
                         save();
                     }
                 });
+        if (inApp && !confirmLower) {
+            GradientDrawable sg = shape(0xFFF4F5F7, 12);
+            sg.setStroke(dp(1), 0xFFB9BEC9);
+            save.setBackground(sg);
+        }
         acts.addView(save, w(0, -1, 1f));
         final String key = sel.key;
-        TextView open = button("App \u2197", cCard, cText, 12, new Runnable() {
+        final TextView open = button("App \u2197", inApp ? 0xFF1DB954 : cCard, inApp ? 0xFFFFFFFF : cText,
+                inApp ? 16 : 12, new Runnable() {
             @Override
             public void run() {
                 host.openInApp(key);
             }
         });
-        LinearLayout.LayoutParams ol = w(dp(62), -1, 0f);
+        LinearLayout.LayoutParams ol = inApp ? w(0, -1, 1.3f) : w(dp(62), -1, 0f);
         ol.setMargins(dp(6), 0, 0, 0);
         acts.addView(open, ol);
+        if (inApp) {
+            GradientDrawable og = shape(0xFF1DB954, 12);
+            og.setStroke(dp(3), 0xFF9BFFC4);   // halo vert
+            open.setBackground(og);
+            glow(open, true);
+        }
         col.addView(acts, w(-1, 0, 1f));
         return col;
+    }
+
+    /** Pulsation lumineuse douce du bouton App (le compteur existe dans l'application d'origine). */
+    private void glow(final View v, final boolean down) {
+        v.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (!v.isAttachedToWindow()) return;
+                v.animate().alpha(down ? 0.55f : 1f).setDuration(600).withEndAction(new Runnable() {
+                    @Override
+                    public void run() {
+                        glow(v, !down);
+                    }
+                }).start();
+            }
+        }, 30);
     }
 
     private void save() {
