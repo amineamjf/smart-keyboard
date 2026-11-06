@@ -29,7 +29,7 @@ public class TableActivity extends Activity {
     private static final int REQ_CLO = 15;
     private static final int REQ_LOG = 16;
     private static final int REQ_LOGF = 17;
-    private static final int F_ALL = 0, F_SENT = 1, F_ORANGE = 2, F_ERR = 3, F_NEW = 4, F_UNL = 5, F_OUT = 6, F_PHOTO = 7;
+    private static final int F_ALL = 0, F_SENT = 1, F_ORANGE = 2, F_ERR = 3, F_NEW = 4, F_UNL = 5, F_OUT = 6, F_PHOTO = 7, F_HIGH = 8, F_NEG = 9;
 
     private final ArrayList<Meters.Row> shown = new ArrayList<>();
     private java.util.HashMap<String, Long> medians = new java.util.HashMap<>();
@@ -62,6 +62,14 @@ public class TableActivity extends Activity {
         return passFilter(r, filter);
     }
 
+    /** Consommation (nouveau - ancien) si les deux index sont des nombres, sinon Long.MIN_VALUE. */
+    private static long consOf(Meters.Row r) {
+        if (r.oldIdx.matches("\\d{1,9}") && r.newIdx.matches("\\d{1,9}")) {
+            return Long.parseLong(r.newIdx) - Long.parseLong(r.oldIdx);
+        }
+        return Long.MIN_VALUE;
+    }
+
     private boolean passFilter(Meters.Row r, int f) {
         switch (f) {
             case F_SENT: return r.status == Meters.SENT;
@@ -72,6 +80,14 @@ public class TableActivity extends Activity {
             case F_NEW: return r.status == Meters.NEW || r.status == Meters.SIM;
             case F_UNL: return Meters.isOffApp(r);
             case F_PHOTO: return !r.photos.isEmpty();
+            case F_HIGH: {
+                long cs = consOf(r);
+                return cs != Long.MIN_VALUE && cs >= 0 && cs > ScanService.maxJump;
+            }
+            case F_NEG: {
+                long cs = consOf(r);
+                return cs != Long.MIN_VALUE && cs < 0;
+            }
             case F_OUT:
                 return r.oldIdx.matches("\\d{1,9}") && r.newIdx.matches("\\d{1,9}")
                         && ScanService.outOfRange(Long.parseLong(r.oldIdx), Long.parseLong(r.newIdx));
@@ -174,7 +190,8 @@ public class TableActivity extends Activity {
         if (chipViews == null) return;
         for (int k = 0; k < chipViews.length; k++) {
             boolean on = chipFilters[k] == filter;
-            String txt = chipNames[k] + (chipFilters[k] == F_ALL ? "" : " " + countFor(chipFilters[k]));
+            String nmk = chipFilters[k] == F_HIGH ? chipNames[k] + " >" + ScanService.maxJump : chipNames[k];
+            String txt = nmk + (chipFilters[k] == F_ALL ? "" : " " + countFor(chipFilters[k]));
             chipViews[k].setText(txt);
             chipViews[k].setTextColor(on ? 0xFFFFFFFF : 0xFF0B0C0E);
             chipViews[k].setBackground(shape(on ? 0xFF1F5FD0 : 0xFFFFFFFF, 20));
@@ -222,6 +239,86 @@ public class TableActivity extends Activity {
         }, 900);
     }
 
+    /** Seuil de consommation elevee (le meme que la hausse maximale), a regler par appui long sur le filtre. */
+    private void askHigh() {
+        final EditText et = new EditText(this);
+        et.setInputType(InputType.TYPE_CLASS_NUMBER);
+        et.setText(String.valueOf(ScanService.maxJump));
+        new AlertDialog.Builder(this)
+                .setTitle("Consommation \u00E9lev\u00E9e : au-del\u00E0 de (m\u00B3)")
+                .setView(et)
+                .setPositiveButton("OK", (d, w) -> {
+                    try {
+                        long v = Long.parseLong(et.getText().toString().trim());
+                        if (v >= 0) {
+                            ScanService.maxJump = v;
+                            ScanService.saveCfg(this);
+                            reload();
+                        }
+                    } catch (NumberFormatException ignored) {
+                    }
+                })
+                .setNegativeButton("Annuler", null)
+                .show();
+    }
+
+    /** Corriger l'ancien index d'un compteur apres verification avec l'application d'origine (journal Cloturee). */
+    private void editOld(final Meters.Row r) {
+        Meters.Closed c = Meters.CLOSED.get(r.key);
+        StringBuilder info = new StringBuilder();
+        info.append("Nouvel index (tableau) : ").append(r.newIdx.isEmpty() ? "-" : r.newIdx).append("\n");
+        info.append("Ancien index actuel : ").append(r.oldIdx.isEmpty() ? "-" : r.oldIdx).append("\n");
+        String prefill = r.oldIdx;
+        boolean same = c != null && !c.idx.isEmpty() && c.idx.equals(r.newIdx);
+        if (c == null || c.idx.isEmpty()) {
+            info.append("\nPas de donn\u00E9e de l'application pour ce compteur (clavier > Outils > Analyser conso).\n");
+        } else if (same) {
+            info.append("\n\u2713 Le nouvel index est identique \u00E0 celui de l'application (").append(c.idx).append(").\n");
+        } else {
+            info.append("\n\u26A0 L'application a un autre nouvel index : ").append(c.idx)
+                    .append(". Aucune proposition automatique.\n");
+        }
+        if (same && c.note.startsWith("consommation lue") && c.conso.matches("\\d{1,9}") && r.newIdx.matches("\\d{1,9}")) {
+            long implied = Long.parseLong(r.newIdx) - Long.parseLong(c.conso);
+            info.append("Consommation de l'application : ").append(c.conso).append("\n");
+            if (implied >= 0) {
+                info.append("Ancien index probable : ").append(implied).append("\n");
+                prefill = String.valueOf(implied);
+            }
+        }
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(20), dp(10), dp(20), 0);
+        TextView msg = label(info.toString(), 14, 0xFF1F2A24, false);
+        box.addView(msg);
+        final EditText et = new EditText(this);
+        et.setInputType(InputType.TYPE_CLASS_NUMBER);
+        et.setText(prefill);
+        et.setSelection(et.getText().length());
+        box.addView(et);
+        new AlertDialog.Builder(this)
+                .setTitle("Ancien index de " + noZeros(r.compteur))
+                .setView(box)
+                .setPositiveButton("Corriger", (d, w) -> {
+                    String v = et.getText().toString().trim();
+                    if (!v.matches("\\d{1,9}")) {
+                        Toast.makeText(this, "Nombre invalide", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    String was = r.oldIdx;
+                    r.oldIdx = v;
+                    String nt = "ancien index corrige (etait " + was + ")";
+                    r.note = r.note.isEmpty() ? nt : r.note + " | " + nt;
+                    ScanService.saveTable(this);
+                    reload();
+                    Toast.makeText(this, "Ancien index corrig\u00E9 : " + v, Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("Annuler", null)
+                .show();
+    }
+
+    private int cardBgC = 0xFFEAF8F0, iconBgC = 0xFFCDEBDB, iconFgC = 0xFF1B6B43;
+
     private static String noZeros(String t) {
         if (t == null) return "";
         t = t.trim();
@@ -235,9 +332,9 @@ public class TableActivity extends Activity {
         LinearLayout l = new LinearLayout(this);
         l.setOrientation(LinearLayout.HORIZONTAL);
         l.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        TextView ic = label(icon, 12, 0xFF1B6B43, false);
+        TextView ic = label(icon, 12, iconFgC, false);
         ic.setGravity(android.view.Gravity.CENTER);
-        ic.setBackground(shape(0xFFCDEBDB, 5));
+        ic.setBackground(shape(iconBgC, 5));
         l.addView(ic, new LinearLayout.LayoutParams(dp(24), dp(24)));
         TextView t = label(text, (int) sp, textColor, bold);
         t.setPadding(dp(10), 0, 0, 0);
@@ -254,15 +351,31 @@ public class TableActivity extends Activity {
         outer.setPadding(dp(8), dp(8), dp(10), dp(8));
 
         // bande bleue a gauche (comme l'application d'origine)
+        final long csv = consOf(r);
+        final boolean isNeg = csv != Long.MIN_VALUE && csv < 0;
+        final boolean isHigh = csv != Long.MIN_VALUE && csv >= 0 && csv > ScanService.maxJump;
+        if (isNeg) {
+            cardBgC = 0xFFFBE7E7;
+            iconBgC = 0xFFF4C9C9;
+            iconFgC = 0xFF8E1B1B;
+        } else if (isHigh) {
+            cardBgC = 0xFFFDF1DE;
+            iconBgC = 0xFFF8DDB0;
+            iconFgC = 0xFF8A5200;
+        } else {
+            cardBgC = 0xFFEAF8F0;
+            iconBgC = 0xFFCDEBDB;
+            iconFgC = 0xFF1B6B43;
+        }
         View bar = new View(this);
-        bar.setBackgroundColor(0xFF5B8DEF);
+        bar.setBackgroundColor(isNeg ? 0xFFD96A6A : isHigh ? 0xFFE8A33D : 0xFF5B8DEF);
         LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(dp(5), ViewGroup.LayoutParams.MATCH_PARENT);
         bl.rightMargin = dp(8);
         outer.addView(bar, bl);
 
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackground(shape(0xFFEAF8F0, 10));
+        card.setBackground(shape(cardBgC, 10));
         card.setPadding(dp(12), dp(10), dp(12), dp(12));
 
         boolean on = r.oldIdx.matches("\\d{1,9}"), nn = r.newIdx.matches("\\d{1,9}");
@@ -294,17 +407,35 @@ public class TableActivity extends Activity {
                     + (r.photos.isEmpty() ? "" : "   📷 photo"), 0xFF3B5546, false, 12));
         }
 
-        if (!r.photos.isEmpty()) {
+        {
             final Meters.Row rr = r;
-            TextView pb = label("\uD83D\uDCF7  Voir dans Cl\u00F4tur\u00E9es", 13, 0xFF0F4D2E, true);
-            pb.setGravity(android.view.Gravity.CENTER);
-            pb.setPadding(dp(12), dp(7), dp(12), dp(7));
-            pb.setBackground(shape(0xFFCDEBDB, 12));
-            pb.setClickable(true);
-            pb.setOnClickListener(v -> openPhoto(rr));
-            LinearLayout.LayoutParams pp = new LinearLayout.LayoutParams(-2, -2);
-            pp.topMargin = dp(8);
-            card.addView(pb, pp);
+            LinearLayout acts = new LinearLayout(this);
+            acts.setOrientation(LinearLayout.HORIZONTAL);
+            if (!r.photos.isEmpty()) {
+                TextView pb = label("\uD83D\uDCF7  Voir dans Cl\u00F4tur\u00E9es", 13, 0xFF0F4D2E, true);
+                pb.setGravity(android.view.Gravity.CENTER);
+                pb.setPadding(dp(12), dp(7), dp(12), dp(7));
+                pb.setBackground(shape(0xFFCDEBDB, 12));
+                pb.setClickable(true);
+                pb.setOnClickListener(v -> openPhoto(rr));
+                acts.addView(pb, new LinearLayout.LayoutParams(-2, -2));
+            }
+            if (isNeg || isHigh) {
+                TextView eb = label("\u270E  Corriger l'ancien index", 13, isNeg ? 0xFF8E1B1B : 0xFF8A5200, true);
+                eb.setGravity(android.view.Gravity.CENTER);
+                eb.setPadding(dp(12), dp(7), dp(12), dp(7));
+                eb.setBackground(shape(isNeg ? 0xFFF4C9C9 : 0xFFF8DDB0, 12));
+                eb.setClickable(true);
+                eb.setOnClickListener(v -> editOld(rr));
+                LinearLayout.LayoutParams el = new LinearLayout.LayoutParams(-2, -2);
+                if (acts.getChildCount() > 0) el.leftMargin = dp(8);
+                acts.addView(eb, el);
+            }
+            if (acts.getChildCount() > 0) {
+                LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(-2, -2);
+                ap.topMargin = dp(8);
+                card.addView(acts, ap);
+            }
         }
 
         // etiquette de verdict (jaune / rouge / vert...)
@@ -374,6 +505,13 @@ public class TableActivity extends Activity {
         int sc = r.warn.isEmpty() ? stripe(r.status) : 0xFFC77000;
         String glyph = r.status == Meters.SENT ? "✓" : r.status == Meters.ERROR ? "✕"
                 : (sc == 0xFFC77000 ? "!" : "●");
+        if (isNeg) {
+            sc = 0xFFD96A6A;
+            glyph = "\u25BC";
+        } else if (isHigh) {
+            sc = 0xFFE8A33D;
+            glyph = "\u25B2";
+        }
         TextView badge = label(glyph, 14, 0xFFFFFFFF, true);
         badge.setGravity(android.view.Gravity.CENTER);
         badge.setBackground(shape(sc, 14));
@@ -756,8 +894,8 @@ public class TableActivity extends Activity {
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setPadding(dp(14), dp(12), dp(6), 0);
         chipNames = new String[]{"Tous", "Envoy\u00E9s", "\u00C0 v\u00E9rifier", "Erreurs", "Non vus",
-                "Hors application", "Hors limites", "\uD83D\uDCF7 Photos"};
-        chipFilters = new int[]{F_ALL, F_SENT, F_ORANGE, F_ERR, F_NEW, F_UNL, F_OUT, F_PHOTO};
+                "Hors application", "\u00C9lev\u00E9es", "N\u00E9gatifs", "\uD83D\uDCF7 Photos"};
+        chipFilters = new int[]{F_ALL, F_SENT, F_ORANGE, F_ERR, F_NEW, F_UNL, F_HIGH, F_NEG, F_PHOTO};
         chipViews = new TextView[chipNames.length];
         for (int k = 0; k < chipNames.length; k++) {
             final int fk = chipFilters[k];
@@ -770,6 +908,12 @@ public class TableActivity extends Activity {
                 filter = fk;
                 reload();
             });
+            if (fk == F_HIGH) {
+                c.setOnLongClickListener(v -> {
+                    askHigh();
+                    return true;
+                });
+            }
             chipViews[k] = c;
             bar.addView(c);
         }
