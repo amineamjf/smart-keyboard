@@ -438,6 +438,15 @@ public class TableActivity extends Activity {
             }
         }
 
+        if (r.note.contains("corrige automatiquement")) {
+            TextView ok = label("\u2713 Ancien index corrig\u00E9 \u00B7 conforme \u00E0 l'application", 12, 0xFF0F4D2E, true);
+            ok.setPadding(dp(10), dp(3), dp(10), dp(3));
+            ok.setBackground(shape(0xFFCDEBDB, 10));
+            LinearLayout.LayoutParams op = new LinearLayout.LayoutParams(-2, -2);
+            op.topMargin = dp(6);
+            card.addView(ok, op);
+        }
+
         // etiquette de verdict (jaune / rouge / vert...)
         String tagText;
         int tagBg, tagFg;
@@ -595,6 +604,31 @@ public class TableActivity extends Activity {
             }
         }
         return out;
+    }
+
+    private boolean autoOldOn() {
+        try {
+            return getSharedPreferences("cfg", MODE_PRIVATE).getBoolean("autoOld", true);
+        } catch (Throwable t) {
+            return true;
+        }
+    }
+
+    /** Corrige tout seul les anciens index quand le nouvel index est confirme par l'application (nouvel - consommation). */
+    private int autoFixOld() {
+        ArrayList<Object[]> fx = oldIndexFixes();
+        int done = 0;
+        for (Object[] f : fx) {
+            Meters.Row r = (Meters.Row) f[0];
+            long implied = (Long) f[1];
+            String was = r.oldIdx;
+            r.oldIdx = String.valueOf(implied);
+            String nt = "ancien index corrige automatiquement (etait " + was + ") - conforme a l'application";
+            r.note = r.note.isEmpty() ? nt : r.note + " | " + nt;
+            done++;
+        }
+        if (done > 0) ScanService.saveTable(this);
+        return done;
     }
 
     private void fixOldIndexes() {
@@ -843,6 +877,17 @@ public class TableActivity extends Activity {
                 "Un ou plusieurs fichiers", this::pickLogFiles));
         box.addView(toolRow(d, "\u2211", "Corriger les anciens index",
                 oldIndexFixes().size() + " \u00E0 corriger (d'apr\u00E8s la consommation)", this::fixOldIndexes));
+        box.addView(toolRow(d, "\u2699", "Correction automatique des anciens index : " + (autoOldOn() ? "OUI" : "NON"),
+                "D\u00E8s que le nouvel index est confirm\u00E9 par l'application", () -> {
+                    boolean nv = !autoOldOn();
+                    getSharedPreferences("cfg", MODE_PRIVATE).edit().putBoolean("autoOld", nv).apply();
+                    Toast.makeText(this, nv ? "Correction automatique activ\u00E9e" : "Correction automatique d\u00E9sactiv\u00E9e",
+                            Toast.LENGTH_SHORT).show();
+                    if (nv) {
+                        autoFixOld();
+                        reload();
+                    }
+                }));
         box.addView(sectionTitle("Exporter"));
         box.addView(toolRow(d, "\uD83D\uDCCA", "Rapport Excel (.xlsx)",
                 "Tous les compteurs avec statuts", this::exportXlsx));
@@ -1111,6 +1156,13 @@ public class TableActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (autoOldOn()) {
+            int n = autoFixOld();
+            if (n > 0) {
+                Toast.makeText(this, n + " ancien(s) index corrig\u00E9(s) automatiquement (conforme \u00E0 l'application)",
+                        Toast.LENGTH_LONG).show();
+            }
+        }
         reload();
     }
 }
