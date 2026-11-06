@@ -223,25 +223,25 @@ final class TypeKb extends View {
 
     private void applyPalette() {
         if (host.light()) {
-            cBg = 0xFFEEEDF3;
-            cStrip = 0xFFF5F4F9;
+            cBg = 0xFFE8EBF2;
+            cStrip = 0xFFF3F5FA;
             cKey = 0xFFFFFFFF;
-            cSpecial = 0xFFDCE2FA;
-            cPress = 0xFFC2C9E8;
-            cText = 0xFF14161B;
-            cDim = 0xFF7A8294;
-            cAccent = 0xFF2F6BFF;
+            cSpecial = 0xFFD5DBEC;
+            cPress = 0xFFBAC4E2;
+            cText = 0xFF161922;
+            cDim = 0xFF7C8599;
+            cAccent = 0xFF3366FF;
             cPop = 0xFFFFFFFF;
         } else {
-            cBg = 0xFF1B1C1F;
-            cStrip = 0xFF25262A;
-            cKey = 0xFF3A3C42;
-            cSpecial = 0xFF2B2C30;
-            cPress = 0xFF5B5E68;
-            cText = 0xFFF1F2F5;
-            cDim = 0xFF8B92A5;
-            cAccent = 0xFF4C8DFF;
-            cPop = 0xFF4A4D56;
+            cBg = 0xFF12141A;
+            cStrip = 0xFF1B1E26;
+            cKey = 0xFF2D303A;
+            cSpecial = 0xFF1F222B;
+            cPress = 0xFF4A4F5E;
+            cText = 0xFFF3F5FA;
+            cDim = 0xFF8E96AB;
+            cAccent = 0xFF5B8CFF;
+            cPop = 0xFF3A3E4A;
         }
     }
 
@@ -571,6 +571,11 @@ final class TypeKb extends View {
             if (sug[i] != null) any = true;
         }
         if (!any) return;
+        // pastille douce derriere la meilleure suggestion (au centre)
+        if (sug[0] != null) {
+            float ph = stripH - 10 * d;
+            rrect(c, cw + 6 * d, 5 * d, cw * 2 - 6 * d, 5 * d + ph, ph / 2f, host.light() ? 0xFFE3E8F7 : 0xFF2A2E3A);
+        }
         // le meilleur au centre, puis gauche, puis droite
         int[] slot = {1, 0, 2};
         for (int i = 0; i < 3; i++) {
@@ -578,14 +583,8 @@ final class TypeKb extends View {
             if (s == null) continue;
             int sl = slot[i];
             float cx = cw * sl + cw / 2f;
-            fit(c, s, cx, stripH / 2f, 18 * d, i == 0 ? cText : cDim, i == 0, cw - 16 * d);
-            if (i > 0) {
-                line(c, cw * sl + (sl == 0 ? cw : 0), stripH * 0.28f, cw * sl + (sl == 0 ? cw : 0), stripH * 0.72f,
-                        1f * d, cSpecial);
-            }
+            fit(c, s, cx, stripH / 2f, 18 * d, i == 0 ? cText : cDim, i == 0, cw - 20 * d);
         }
-        line(c, cw, stripH * 0.28f, cw, stripH * 0.72f, 1f * d, cSpecial);
-        line(c, cw * 2, stripH * 0.28f, cw * 2, stripH * 0.72f, 1f * d, cSpecial);
     }
 
     private boolean isPressed(Key k) {
@@ -598,19 +597,24 @@ final class TypeKb extends View {
     private void drawKey(Canvas c, Key k) {
         boolean special = (k.type != T_CHAR && k.type != T_SPACE) || k.alt;
         boolean pr = isPressed(k);
+        boolean enter = k.type == T_ENTER;
         int bg = special ? cSpecial : cKey;
-        if (k.type == T_ENTER && !host.light()) bg = cAccent;
+        if (enter) bg = cAccent;
         if (k.type == T_SHIFT && shift != SH_OFF) bg = cKey;
-        if (pr) bg = (k.type == T_ENTER && !host.light()) ? 0xFF2D5FCC : cPress;
-        float rad = 9 * d;
+        if (pr) bg = enter ? 0xFF2A56D6 : cPress;
+        float rad = 11 * d;
+        if (!pr) {
+            // ombre douce sous la touche
+            rrect(c, k.l, k.t + 1.6f * d, k.r, k.b + 1.6f * d, rad, host.light() ? 0x26283A64 : 0x66000000);
+        }
         rrect(c, k.l, k.t, k.r, k.b, rad, bg);
-        if (!pr && !host.light()) {
+        if (!pr && !host.light() && !enter) {
             // fin liser\u00E9 haut pour le relief
             line(c, k.l + rad, k.t + 0.5f * d, k.r - rad, k.t + 0.5f * d, 1f * d, 0x14FFFFFF);
         }
         float cx = (k.l + k.r) / 2f, cy = (k.t + k.b) / 2f;
         if (k.type == T_SHIFT || k.type == T_DEL || k.type == T_ENTER || k.type == T_LANG) {
-            int col = (k.type == T_ENTER && !host.light()) ? 0xFFFFFFFF : cText;
+            int col = enter ? 0xFFFFFFFF : cText;
             drawIcon(c, k, cx, cy, col);
             if (k.type == T_LANG) {
                 text(c, Suggest.AR.equals(lang) ? "FR" : "\u0639", cx + 11 * d, cy + 11 * d, 9 * d, cDim, true);
@@ -654,8 +658,9 @@ final class TypeKb extends View {
         float l = Math.max(2 * d, Math.min(W - bw - 2 * d, cx - bw / 2f));
         float t = Math.max(0, k.t - bh - 6 * d);
         // ombre simple
-        rrect(c, l + 0, t + 3 * d, l + bw, t + bh + 3 * d, 14 * d, 0x40000000);
-        rrect(c, l, t, l + bw, t + bh, 14 * d, cPop);
+        rrect(c, l - 1 * d, t + 2 * d, l + bw + 1 * d, t + bh + 5 * d, 17 * d, 0x1A000000);
+        rrect(c, l, t + 3 * d, l + bw, t + bh + 3 * d, 16 * d, 0x40000000);
+        rrect(c, l, t, l + bw, t + bh, 16 * d, cPop);
         String s = shown(k);
         if (isHarakat(k)) s = "\u25CC" + k.label;
         text(c, s, l + bw / 2f, t + bh / 2f, 32 * d, host.light() ? 0xFF14161B : 0xFFF1F2F5, false);
@@ -739,8 +744,9 @@ final class TypeKb extends View {
     private void drawPopup(Canvas c, Ptr q, float W) {
         Popup pp = q.popup;
         float wd = pp.width() + 12 * d, ht = pp.rows.length * pp.chh + 12 * d;
-        rrect(c, pp.l + 0, pp.t + 4 * d, pp.l + wd, pp.t + ht + 4 * d, 16 * d, 0x40000000);
-        rrect(c, pp.l, pp.t, pp.l + wd, pp.t + ht, 16 * d, cPop);
+        rrect(c, pp.l - 1 * d, pp.t + 2 * d, pp.l + wd + 1 * d, pp.t + ht + 7 * d, 19 * d, 0x1A000000);
+        rrect(c, pp.l, pp.t + 4 * d, pp.l + wd, pp.t + ht + 4 * d, 18 * d, 0x40000000);
+        rrect(c, pp.l, pp.t, pp.l + wd, pp.t + ht, 18 * d, cPop);
         for (int r = 0; r < pp.rows.length; r++) {
             for (int i = 0; i < pp.rows[r].length; i++) {
                 float cl = pp.l + 6 * d + i * pp.cw, ct = pp.t + 6 * d + r * pp.chh;

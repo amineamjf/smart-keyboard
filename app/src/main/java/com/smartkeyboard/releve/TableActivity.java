@@ -108,6 +108,9 @@ public class TableActivity extends Activity {
         Button b = new Button(this);
         b.setText(label);
         b.setAllCaps(false);
+        b.setBackground(shape(0xFFE9EFFF, 20));
+        b.setTextColor(0xFF3366FF);
+        b.setStateListAnimator(null);
         b.setOnClickListener(v -> {
             filter = f;
             reload();
@@ -194,7 +197,7 @@ public class TableActivity extends Activity {
             String txt = nmk + (chipFilters[k] == F_ALL ? "" : " " + countFor(chipFilters[k]));
             chipViews[k].setText(txt);
             chipViews[k].setTextColor(on ? 0xFFFFFFFF : 0xFF0B0C0E);
-            chipViews[k].setBackground(shape(on ? 0xFF1F5FD0 : 0xFFFFFFFF, 20));
+            chipViews[k].setBackground(shape(on ? 0xFF3366FF : 0xFFFFFFFF, 20));
         }
     }
 
@@ -375,7 +378,7 @@ public class TableActivity extends Activity {
 
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackground(shape(cardBgC, 10));
+        card.setBackground(shape(cardBgC, 18));
         card.setPadding(dp(12), dp(10), dp(12), dp(12));
 
         boolean on = r.oldIdx.matches("\\d{1,9}"), nn = r.newIdx.matches("\\d{1,9}");

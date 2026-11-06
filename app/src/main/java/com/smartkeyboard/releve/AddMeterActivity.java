@@ -41,12 +41,15 @@ public class AddMeterActivity extends Activity {
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(32, 24, 32, 24);
+        root.setBackgroundColor(0xFFF5F7FB);
+        root.setPadding(dp(20), dp(28), dp(20), dp(20));
 
         TextView title = new TextView(this);
         title.setText("Ajouter un compteur");
-        title.setTextSize(18);
-        title.setPadding(0, 0, 0, 12);
+        title.setTextSize(22);
+        title.setTextColor(0xFF121521);
+        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        title.setPadding(0, 0, 0, dp(14));
         root.addView(title);
 
         etSearch = new EditText(this);
@@ -67,16 +70,21 @@ public class AddMeterActivity extends Activity {
                 h.postDelayed(doSearch, 350);
             }
         });
-        root.addView(etSearch);
+        styleField(etSearch);
+        root.addView(etSearch, fieldLp());
 
         info = new TextView(this);
         info.setTextSize(15);
-        info.setPadding(0, 12, 0, 12);
+        info.setTextColor(0xFF121521);
+        info.setBackground(shape(0xFFFFFFFF, 20));
+        info.setElevation(dp(2));
+        info.setPadding(dp(16), dp(14), dp(16), dp(14));
         info.setText("Tapez le numéro: s'il est dans le tableau, ses informations s'affichent.");
         root.addView(info);
 
         next = new Button(this);
         next.setText("Suivant ›");
+        styleButton(next, 0xFFE9EFFF, 0xFF3366FF);
         next.setVisibility(View.GONE);
         next.setOnClickListener(v -> {
             if (found.isEmpty()) return;
@@ -90,28 +98,75 @@ public class AddMeterActivity extends Activity {
         etTournee.setInputType(InputType.TYPE_CLASS_TEXT);
         String t = getIntent().getStringExtra("tournee");
         etTournee.setText(t == null ? "" : t);
-        root.addView(etTournee);
+        styleField(etTournee);
+        root.addView(etTournee, fieldLp());
 
         etIdx = new EditText(this);
         etIdx.setHint("Nouvel index");
         etIdx.setInputType(InputType.TYPE_CLASS_NUMBER);
-        root.addView(etIdx);
+        styleField(etIdx);
+        root.addView(etIdx, fieldLp());
 
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setPadding(0, 16, 0, 0);
+        row.setPadding(0, dp(16), 0, 0);
         Button cancel = new Button(this);
         cancel.setText("Annuler");
+        styleButton(cancel, 0xFFE9EFFF, 0xFF3366FF);
         cancel.setOnClickListener(v -> finish());
         Button save = new Button(this);
         save.setText("Enregistrer");
+        styleButton(save, 0xFF3366FF, 0xFFFFFFFF);
         save.setOnClickListener(v -> save());
-        row.addView(cancel, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        row.addView(save, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        LinearLayout.LayoutParams lpL = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        lpL.rightMargin = dp(8);
+        LinearLayout.LayoutParams lpR = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        lpR.leftMargin = dp(8);
+        row.addView(cancel, lpL);
+        row.addView(save, lpR);
         root.addView(row);
 
         setContentView(root);
         etSearch.requestFocus();
+    }
+
+    // ---------- style ----------
+    private int dp(int v) {
+        return (int) (v * getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    private android.graphics.drawable.GradientDrawable shape(int color, int radiusDp) {
+        android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
+        g.setColor(color);
+        g.setCornerRadius(dp(radiusDp));
+        return g;
+    }
+
+    private void styleField(EditText e) {
+        android.graphics.drawable.GradientDrawable g = shape(0xFFFFFFFF, 16);
+        g.setStroke(dp(1), 0xFFDDE3F0);
+        e.setBackground(g);
+        e.setTextColor(0xFF121521);
+        e.setHintTextColor(0xFF98A2B3);
+        e.setPadding(dp(16), dp(14), dp(16), dp(14));
+    }
+
+    private LinearLayout.LayoutParams fieldLp() {
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        p.topMargin = dp(8);
+        p.bottomMargin = dp(4);
+        return p;
+    }
+
+    private void styleButton(Button b, int bg, int fg) {
+        b.setAllCaps(false);
+        b.setTextColor(fg);
+        b.setTextSize(15);
+        b.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        b.setBackground(shape(bg, 26));
+        b.setStateListAnimator(null);
+        b.setPadding(dp(14), dp(14), dp(14), dp(14));
     }
 
     private void search() {

@@ -37,8 +37,8 @@ public class MainActivity extends Activity {
     };
 
     // ---------- interface ----------
-    private static final int BLUE = 0xFF1F5FD0, GREEN = 0xFF17803F, RED = 0xFFC62828, AMBER = 0xFFC77000,
-            INK = 0xFF0B0C0E, GRAY = 0xFF5B6573, PALE = 0xFFE8EFFC, CHIP = 0xFFEEF0F3, PAGE = 0xFFF3F5F8;
+    private static final int BLUE = 0xFF3366FF, GREEN = 0xFF12A150, RED = 0xFFE5484D, AMBER = 0xFFF5A524,
+            INK = 0xFF121521, GRAY = 0xFF667085, PALE = 0xFFE9EFFF, CHIP = 0xFFF0F2F8, PAGE = 0xFFF5F7FB;
     private static final int REQ_LOGDIR = 12;
 
     private TextView chipService, chipMode, chipRows;
@@ -85,7 +85,7 @@ public class MainActivity extends Activity {
     private TextView valueChip(String s, Runnable r) {
         TextView t = tv(s, 14, INK, true);
         t.setPadding(dp(12), dp(6), dp(12), dp(6));
-        t.setBackground(shape(CHIP, 10));
+        t.setBackground(shape(CHIP, 20));
         if (r != null) t.setOnClickListener(v -> r.run());
         return t;
     }
@@ -94,8 +94,8 @@ public class MainActivity extends Activity {
         LinearLayout c = new LinearLayout(this);
         c.setOrientation(LinearLayout.VERTICAL);
         c.setPadding(dp(16), dp(16), dp(16), dp(10));
-        c.setBackground(shape(0xFFFFFFFF, 18));
-        c.setElevation(dp(2));
+        c.setBackground(shape(0xFFFFFFFF, 24));
+        c.setElevation(dp(3));
         TextView h = tv(title.toUpperCase(), 12, GRAY, true);
         h.setLetterSpacing(0.08f);
         h.setPadding(0, 0, 0, dp(6));
@@ -110,7 +110,7 @@ public class MainActivity extends Activity {
         row.setPadding(0, dp(8), 0, dp(8));
         TextView ic = tv(icon, 18, INK, false);
         ic.setGravity(android.view.Gravity.CENTER);
-        ic.setBackground(shape(PALE, 12));
+        ic.setBackground(shape(PALE, 20));
         row.addView(ic, new LinearLayout.LayoutParams(dp(40), dp(40)));
         LinearLayout mid = new LinearLayout(this);
         mid.setOrientation(LinearLayout.VERTICAL);
@@ -136,7 +136,7 @@ public class MainActivity extends Activity {
         TextView t = tv(label, 15, fg, true);
         t.setGravity(android.view.Gravity.CENTER);
         t.setPadding(dp(14), dp(14), dp(14), dp(14));
-        t.setBackground(shape(bg, 14));
+        t.setBackground(shape(bg, 28));
         t.setOnClickListener(v -> r.run());
         t.setLayoutParams(lp(-1, -2, 8));
         return t;
@@ -161,8 +161,14 @@ public class MainActivity extends Activity {
         // en-tete
         LinearLayout top = new LinearLayout(this);
         top.setOrientation(LinearLayout.VERTICAL);
-        top.setBackgroundColor(BLUE);
-        top.setPadding(dp(20), dp(34), dp(20), dp(18));
+        android.graphics.drawable.GradientDrawable hdr = new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
+                new int[]{0xFF2F6BFF, 0xFF6A3DF0});
+        float hr = dp(28);
+        hdr.setCornerRadii(new float[]{0, 0, 0, 0, hr, hr, hr, hr});
+        top.setBackground(hdr);
+        top.setElevation(dp(4));
+        top.setPadding(dp(20), dp(34), dp(20), dp(22));
         top.addView(tv("Relev\u00E9 Clavier", 22, 0xFFFFFFFF, true));
         top.addView(tv(VERSION, 13, 0xCCFFFFFF, false));
         LinearLayout chips = new LinearLayout(this);

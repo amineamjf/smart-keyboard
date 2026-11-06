@@ -41,25 +41,25 @@ final class QuickPanel extends LinearLayout {
         this.host = host;
         d = c.getResources().getDisplayMetrics().density;
         if (light) {
-            cBg = 0xFFE3E6EB;
+            cBg = 0xFFE8EBF2;
             cCard = 0xFFFFFFFF;
-            cText = 0xFF14161B;
-            cDim = 0xFF6B7385;
-            cAccent = 0xFF2F6BFF;
-            cGreen = 0xFF17803F;
-            cRed = 0xFFC62828;
+            cText = 0xFF161922;
+            cDim = 0xFF667085;
+            cAccent = 0xFF3366FF;
+            cGreen = 0xFF12A150;
+            cRed = 0xFFE5484D;
             cKey = 0xFFFFFFFF;
-            cAmber = 0xFFC77000;
+            cAmber = 0xFFF5A524;
         } else {
-            cBg = 0xFF1B1C1F;
-            cCard = 0xFF2B2C30;
-            cText = 0xFFF1F2F5;
-            cDim = 0xFF9097A8;
-            cAccent = 0xFF4C8DFF;
-            cGreen = 0xFF2FA866;
-            cRed = 0xFFE5565A;
-            cKey = 0xFF3A3C42;
-            cAmber = 0xFFE59A1F;
+            cBg = 0xFF12141A;
+            cCard = 0xFF1F222B;
+            cText = 0xFFF3F5FA;
+            cDim = 0xFF8E96AB;
+            cAccent = 0xFF5B8CFF;
+            cGreen = 0xFF2FB674;
+            cRed = 0xFFEF5B60;
+            cKey = 0xFF2D303A;
+            cAmber = 0xFFF0A82E;
         }
         setOrientation(VERTICAL);
         setBackgroundColor(cBg);
@@ -96,7 +96,7 @@ final class QuickPanel extends LinearLayout {
     private TextView button(String label, int bg, int fg, float sp, final Runnable a) {
         TextView t = tv(label, sp, fg, true);
         t.setGravity(Gravity.CENTER);
-        t.setBackground(shape(bg, 12));
+        t.setBackground(shape(bg, 16));
         t.setClickable(true);
         t.setOnClickListener(new View.OnClickListener() {
             @Override
