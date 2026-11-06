@@ -380,7 +380,8 @@ public class ScanService extends AccessibilityService {
         gotoDirect = false;
         gotoDirectTried = false;
         gotoStartT = SystemClock.uptimeMillis();
-        gotoQuery = suffixFor(key);
+        // dans Cloturee(s) (des milliers de cartes) un suffixe court donne plusieurs cartes: on cherche le numero complet
+        gotoQuery = gotoClosed ? key : suffixFor(key);
         log("ALLER AU COMPTEUR " + key + " (recherche: " + gotoQuery + ")");
         if (!gotoClosed && trySwipe(key)) return;
         goSearch();
