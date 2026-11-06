@@ -203,13 +203,17 @@ public class TableActivity extends Activity {
             return;
         }
         try {
-            Intent li = new Intent(Intent.ACTION_MAIN);
-            li.addCategory(Intent.CATEGORY_LAUNCHER);
-            li.setPackage("com.somei.smartmobility.srmrsk");
+            Intent li = getPackageManager().getLaunchIntentForPackage("com.somei.smartmobility.srmrsk");
+            if (li == null) {
+                li = new Intent(Intent.ACTION_MAIN);
+                li.addCategory(Intent.CATEGORY_LAUNCHER);
+                li.setPackage("com.somei.smartmobility.srmrsk");
+            }
             li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
             startActivity(li);
         } catch (Throwable t) {
-            Toast.makeText(this, "Impossible d'ouvrir l'application d'origine", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Impossible d'ouvrir l'application d'origine (" + t.getClass().getSimpleName() + ")",
+                    Toast.LENGTH_LONG).show();
             return;
         }
         final String key = r.key;
