@@ -3432,6 +3432,12 @@ public class ScanService extends AccessibilityService {
         }
     }
 
+    /** Apres une restauration: relit les reglages (les fichiers de donnees sont deja recharges). */
+    public static void reloadAfterRestore(android.content.Context c) {
+        cfgLoaded = false;
+        ensureLoaded(c);
+    }
+
     public static void saveTournees(android.content.Context c) {
         StringBuilder sb = new StringBuilder();
         for (String t : Meters.ACTIVE_T) sb.append(t).append('\u0001');

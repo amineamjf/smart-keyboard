@@ -28,6 +28,8 @@ public class TableActivity extends Activity {
     private static final int REQ_UNL = 14;
     private static final int REQ_CLO = 15;
     private static final int REQ_TODO = 18;
+    private static final int REQ_BKP = 19;
+    private static final int REQ_RST = 20;
     private static final int REQ_LOG = 16;
     private static final int REQ_LOGF = 17;
     private static final int F_ALL = 0, F_SENT = 1, F_ORANGE = 2, F_ERR = 3, F_NEW = 4, F_UNL = 5, F_OUT = 6, F_PHOTO = 7, F_HIGH = 8, F_NEG = 9;
@@ -575,6 +577,109 @@ public class TableActivity extends Activity {
         createXlsx("non-repertories", REQ_UNL);
     }
 
+    // ---------- Sauvegarde complete ----------
+
+    private void backupSave() {
+        Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("application/zip");
+        i.putExtra(Intent.EXTRA_TITLE, "releve-sauvegarde-" + today() + ".zip");
+        startActivityForResult(i, REQ_BKP);
+    }
+
+    private void backupRestoreAsk() {
+        new AlertDialog.Builder(this).setTitle("Restaurer une sauvegarde")
+                .setMessage("Le tableau, les lectures, \u00AB \u00C0 r\u00E9aliser \u00BB et les r\u00E9glages actuels seront remplac\u00E9s "
+                        + "par ceux de la sauvegarde. Une copie de l'\u00E9tat actuel est gard\u00E9e automatiquement.")
+                .setPositiveButton("Choisir le fichier", (dlg, w) -> {
+                    Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                    i.addCategory(Intent.CATEGORY_OPENABLE);
+                    i.setType("*/*");
+                    startActivityForResult(i, REQ_RST);
+                })
+                .setNegativeButton("Annuler", null).show();
+    }
+
+    private void handleBackupResult(int req, int res, Intent data) {
+        if (res != RESULT_OK || data == null || data.getData() == null) return;
+        final Uri uri = data.getData();
+        if (req == REQ_BKP) {
+            new Thread(() -> {
+                String msg;
+                try (OutputStream os = getContentResolver().openOutputStream(uri)) {
+                    os.write(Backup.build(TableActivity.this));
+                    msg = "Sauvegarde enregistr\u00E9e";
+                } catch (Throwable e) {
+                    msg = "Echec de la sauvegarde: " + e;
+                }
+                final String m = msg;
+                runOnUiThread(() -> Toast.makeText(TableActivity.this, m, Toast.LENGTH_LONG).show());
+            }).start();
+            return;
+        }
+        new Thread(() -> {
+            String msg;
+            boolean ok = false;
+            try (java.io.InputStream in = getContentResolver().openInputStream(uri)) {
+                msg = "Restaur\u00E9 : " + Backup.restore(TableActivity.this, in);
+                ok = true;
+            } catch (Throwable e) {
+                msg = "Restauration impossible: " + e.getMessage() + "\n\nRien n'a \u00E9t\u00E9 modifi\u00E9.";
+            }
+            final String m = msg;
+            final boolean good = ok;
+            runOnUiThread(() -> {
+                new AlertDialog.Builder(TableActivity.this).setTitle(good ? "Sauvegarde restaur\u00E9e" : "Erreur")
+                        .setMessage(m).setPositiveButton("OK", null).show();
+                if (good) reload();
+            });
+        }).start();
+    }
+
+    /** Prepare un fichier puis ouvre la feuille de partage (Gmail, Drive, WhatsApp...). */
+    private void shareBuilt(final String name, final String mime, final java.util.concurrent.Callable<byte[]> maker) {
+        Toast.makeText(this, "Pr\u00E9paration du fichier...", Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            try {
+                byte[] data = maker.call();
+                java.io.File dir = new java.io.File(getCacheDir(), "share");
+                if (!dir.exists()) dir.mkdirs();
+                java.io.File[] old = dir.listFiles();
+                if (old != null) for (java.io.File o : old) o.delete();
+                try (java.io.FileOutputStream fo = new java.io.FileOutputStream(new java.io.File(dir, name))) {
+                    fo.write(data);
+                }
+                final Uri u = ShareProvider.uriFor(name);
+                runOnUiThread(() -> {
+                    try {
+                        Intent i = new Intent(Intent.ACTION_SEND);
+                        i.setType(mime);
+                        i.putExtra(Intent.EXTRA_STREAM, u);
+                        i.putExtra(Intent.EXTRA_SUBJECT, name);
+                        i.setClipData(android.content.ClipData.newRawUri(name, u));
+                        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        startActivity(Intent.createChooser(i, "Partager"));
+                    } catch (Throwable e) {
+                        Toast.makeText(TableActivity.this, "Partage impossible: " + e, Toast.LENGTH_LONG).show();
+                    }
+                });
+            } catch (Throwable e) {
+                final String m = "Echec: " + e;
+                runOnUiThread(() -> Toast.makeText(TableActivity.this, m, Toast.LENGTH_LONG).show());
+            }
+        }).start();
+    }
+
+    private void shareBackup() {
+        shareBuilt("releve-sauvegarde-" + today() + ".zip", "application/zip", () -> Backup.build(TableActivity.this));
+    }
+
+    private void shareReport() {
+        shareBuilt("rapport-releve-" + today() + ".xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                () -> XlsxReport.build(ScanService.maxJump, ScanService.maxDrop));
+    }
+
     private void exportTodo() {
         Meters.loadTodo(new java.io.File(getFilesDir(), "todo.tsv"));
         if (Meters.TODO.isEmpty()) {
@@ -928,6 +1033,15 @@ public class TableActivity extends Activity {
         box.addView(toolRow(d, "\u2709", "Non r\u00E9pertori\u00E9s (.xlsx)",
                 Meters.countOffApp() + " compteur(s) \u00E0 transmettre", this::exportUnl));
         box.addView(toolRow(d, "\uD83D\uDCC4", "Rapport CSV", "Format texte simple", this::exportCsv));
+        box.addView(sectionTitle("Sauvegarde et partage"));
+        box.addView(toolRow(d, "\uD83D\uDCBE", "Sauvegarder tout (.zip)",
+                "Tableau, lectures, \u00E0 r\u00E9aliser, r\u00E9glages", this::backupSave));
+        box.addView(toolRow(d, "\u267B", "Restaurer une sauvegarde",
+                "Remet tout comme dans le fichier", this::backupRestoreAsk));
+        box.addView(toolRow(d, "\uD83D\uDCE8", "Partager la sauvegarde",
+                "Gmail, Drive, WhatsApp...", this::shareBackup));
+        box.addView(toolRow(d, "\uD83D\uDCE4", "Partager le rapport Excel",
+                "Gmail, Drive, WhatsApp...", this::shareReport));
         android.widget.ScrollView sv = new android.widget.ScrollView(this);
         sv.addView(box);
         d.setContentView(sv);
@@ -1129,6 +1243,10 @@ public class TableActivity extends Activity {
     @Override
     protected void onActivityResult(int req, int res, Intent data) {
         super.onActivityResult(req, res, data);
+        if (req == REQ_BKP || req == REQ_RST) {
+            handleBackupResult(req, res, data);
+            return;
+        }
         if (req == REQ_LOG || req == REQ_LOGF) {
             if (res != RESULT_OK || data == null) return;
             final java.util.ArrayList<Uri> files = new java.util.ArrayList<>();

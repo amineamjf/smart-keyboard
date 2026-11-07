@@ -57,5 +57,11 @@
                 android:resource="@xml/method" />
         </service>
 
+        <provider
+            android:name=".ShareProvider"
+            android:authorities="com.smartkeyboard.releve.share"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+
     </application>
 </manifest>
