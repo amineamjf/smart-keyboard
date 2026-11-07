@@ -97,7 +97,11 @@ public class TableActivity extends Activity {
 
     private void reload() {
         shown.clear();
-        medians = Verdict.medians(Meters.ROWS);
+        try {
+            medians = Verdict.medians(Meters.ROWS);
+        } catch (Throwable t) {
+            medians = new java.util.HashMap<>();
+        }
         for (Meters.Row r : Meters.ROWS) if (pass(r)) shown.add(r);
         head.setText(shown.size() + " / " + Meters.ROWS.size() + " lignes");
         adapter.notifyDataSetChanged();
@@ -345,7 +349,18 @@ public class TableActivity extends Activity {
         return l;
     }
 
+    /** Une carte ne doit jamais faire planter l'ecran: en cas d'erreur on affiche une carte simple avec la cause. */
     private View rowView(Meters.Row r) {
+        try {
+            return rowViewInner(r);
+        } catch (Throwable t) {
+            TextView e = label(noZeros(r.compteur) + "  (erreur d'affichage : " + t + ")", 13, 0xFF8E1B1B, false);
+            e.setPadding(dp(14), dp(10), dp(14), dp(10));
+            return e;
+        }
+    }
+
+    private View rowViewInner(Meters.Row r) {
         LinearLayout outer = new LinearLayout(this);
         outer.setOrientation(LinearLayout.HORIZONTAL);
         outer.setPadding(dp(8), dp(8), dp(10), dp(8));
@@ -1156,12 +1171,16 @@ public class TableActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        if (autoOldOn()) {
-            int n = autoFixOld();
-            if (n > 0) {
-                Toast.makeText(this, n + " ancien(s) index corrig\u00E9(s) automatiquement (conforme \u00E0 l'application)",
-                        Toast.LENGTH_LONG).show();
+        try {
+            if (autoOldOn()) {
+                int n = autoFixOld();
+                if (n > 0) {
+                    Toast.makeText(this, n + " ancien(s) index corrig\u00E9(s) automatiquement (conforme \u00E0 l'application)",
+                            Toast.LENGTH_LONG).show();
+                }
             }
+        } catch (Throwable t) {
+            Toast.makeText(this, "Correction automatique ignor\u00E9e : " + t, Toast.LENGTH_LONG).show();
         }
         reload();
     }

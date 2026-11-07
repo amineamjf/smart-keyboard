@@ -591,13 +591,39 @@ public final class Meters {
     }
 
     /** Valeur d'une colonne du fichier d'origine, retrouvee par son en-tete (noms avec * = debut). */
+    /** En-tetes normalises, calcules une seule fois par jeu d'en-tetes (norm() est couteux: regex + Normalizer). */
+    private static final class HeadNorm {
+        final String[] src;
+        final String[] norm;
+
+        HeadNorm(String[] src) {
+            this.src = src;
+            this.norm = new String[src.length];
+            for (int i = 0; i < src.length; i++) norm[i] = norm(src[i]);
+        }
+    }
+
+    private static volatile HeadNorm headNorm = null;
+
+    private static String[] normHeads() {
+        String[] h = HEADS;
+        HeadNorm c = headNorm;
+        if (c == null || c.src != h) {
+            c = new HeadNorm(h);
+            headNorm = c;
+        }
+        return c.norm;
+    }
+
     public static String colValue(Row r, String... names) {
         if (r == null || r.cols == null) return "";
+        String[] hn = normHeads();
         for (String want : names) {
-            for (int i = 0; i < HEADS.length && i < r.cols.length; i++) {
-                String n = norm(HEADS[i]);
-                boolean ok = want.endsWith("*") ? n.startsWith(want.substring(0, want.length() - 1))
-                        : n.equals(want);
+            boolean star = want.endsWith("*");
+            String pre = star ? want.substring(0, want.length() - 1) : want;
+            for (int i = 0; i < hn.length && i < r.cols.length; i++) {
+                String n = hn[i];
+                boolean ok = star ? n.startsWith(pre) : n.equals(pre);
                 if (ok && r.cols[i] != null && !r.cols[i].trim().isEmpty()) return r.cols[i].trim();
             }
         }
