@@ -483,6 +483,110 @@ public final class XlsxReport {
         return bos.toByteArray();
     }
 
+    private static final String[] HEAD_TODO = {"Tourn\u00E9e", "N\u00B0 Compteur", "N\u00B0 Contrat", "Client",
+            "T\u00E9l\u00E9phone", "Adresse", "IG", "Jours"};
+    private static final double[] WIDTH_TODO = {16, 24, 16, 30, 18, 66, 30, 8};
+
+    private static String sheetTodo(java.util.ArrayList<Meters.Todo> list) {
+        int n = list.size();
+        int lastRow = 4 + Math.max(n, 1);
+        int cols = HEAD_TODO.length;
+        String lastCol = colName(cols - 1);
+        StringBuilder sb = new StringBuilder();
+        sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+        sb.append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
+        sb.append("<sheetViews><sheetView workbookViewId=\"0\" showGridLines=\"0\" tabSelected=\"1\">")
+                .append("<pane ySplit=\"4\" topLeftCell=\"A5\" activePane=\"bottomLeft\" state=\"frozen\"/>")
+                .append("<selection pane=\"bottomLeft\" activeCell=\"A5\" sqref=\"A5\"/></sheetView></sheetViews>");
+        sb.append("<sheetFormatPr defaultRowHeight=\"18\"/><cols>");
+        for (int i = 0; i < cols; i++) {
+            sb.append("<col min=\"").append(i + 1).append("\" max=\"").append(i + 1)
+                    .append("\" width=\"").append(WIDTH_TODO[i]).append("\" customWidth=\"1\"/>");
+        }
+        sb.append("</cols><sheetData>");
+        String date = new SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.FRANCE).format(new Date());
+        sb.append("<row r=\"1\" ht=\"34\" customHeight=\"1\">");
+        txt(sb, 0, 1, S_TITLE, "Interventions \u00E0 r\u00E9aliser (lues dans l'application)");
+        for (int c = 1; c < cols; c++) txt(sb, c, 1, S_TITLE, "");
+        sb.append("</row>");
+        sb.append("<row r=\"2\" ht=\"20\" customHeight=\"1\">");
+        txt(sb, 0, 2, S_SUB, "G\u00E9n\u00E9r\u00E9 le " + date + "   |   " + n + " compteurs");
+        for (int c = 1; c < cols; c++) txt(sb, c, 2, S_SUB, "");
+        sb.append("</row>");
+        sb.append("<row r=\"3\" ht=\"6\" customHeight=\"1\"/>");
+        sb.append("<row r=\"4\" ht=\"32\" customHeight=\"1\">");
+        for (int c = 0; c < cols; c++) txt(sb, c, 4, S_HEAD, HEAD_TODO[c]);
+        sb.append("</row>");
+        int r = 5;
+        for (int i = 0; i < n; i++, r++) {
+            Meters.Todo m = list.get(i);
+            int t = (i % 2) == 1 ? S_TXT_B : S_TXT;
+            sb.append("<row r=\"").append(r).append("\" ht=\"20\" customHeight=\"1\">");
+            txt(sb, 0, r, t, m.tournee);
+            txt(sb, 1, r, t, m.meter);
+            txt(sb, 2, r, t, m.contract);
+            txt(sb, 3, r, t, m.name);
+            txt(sb, 4, r, t, m.phone);
+            txt(sb, 5, r, t, m.address);
+            txt(sb, 6, r, t, m.ig);
+            txt(sb, 7, r, t, m.days);
+            sb.append("</row>");
+        }
+        sb.append("</sheetData>");
+        sb.append("<autoFilter ref=\"A4:").append(lastCol).append(lastRow).append("\"/>");
+        sb.append("<mergeCells count=\"2\"><mergeCell ref=\"A1:").append(lastCol)
+                .append("1\"/><mergeCell ref=\"A2:").append(lastCol).append("2\"/></mergeCells>");
+        sb.append("<pageMargins left=\"0.4\" right=\"0.4\" top=\"0.5\" bottom=\"0.5\" header=\"0.3\" footer=\"0.3\"/>");
+        sb.append("</worksheet>");
+        return sb.toString();
+    }
+
+    /** Liste "A realiser" lue dans l'application: compteur, contrat, nom, telephone, adresse. */
+    public static byte[] buildTodo() throws Exception {
+        java.util.ArrayList<Meters.Todo> list = new java.util.ArrayList<>(Meters.TODO.values());
+        java.util.Collections.sort(list, (a, b) -> {
+            int c = a.tournee.compareTo(b.tournee);
+            return c != 0 ? c : a.meter.compareTo(b.meter);
+        });
+        int n = list.size();
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        ZipOutputStream z = new ZipOutputStream(bos);
+        put(z, "[Content_Types].xml",
+                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+                + "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">"
+                + "<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>"
+                + "<Default Extension=\"xml\" ContentType=\"application/xml\"/>"
+                + "<Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/>"
+                + "<Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>"
+                + "<Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/>"
+                + "</Types>");
+        put(z, "_rels/.rels",
+                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+                + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+                + "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/>"
+                + "</Relationships>");
+        put(z, "xl/workbook.xml",
+                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+                + "<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" "
+                + "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">"
+                + "<bookViews><workbookView activeTab=\"0\"/></bookViews>"
+                + "<sheets><sheet name=\"A realiser\" sheetId=\"1\" r:id=\"rId1\"/></sheets>"
+                + "<definedNames><definedName name=\"_xlnm._FilterDatabase\" localSheetId=\"0\" hidden=\"1\">'A realiser'!$A$4:$H$"
+                + (4 + Math.max(n, 1)) + "</definedName></definedNames>"
+                + "</workbook>");
+        put(z, "xl/_rels/workbook.xml.rels",
+                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+                + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+                + "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/>"
+                + "<Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/>"
+                + "</Relationships>");
+        put(z, "xl/styles.xml", styles());
+        put(z, "xl/worksheets/sheet1.xml", sheetTodo(list));
+        z.finish();
+        z.close();
+        return bos.toByteArray();
+    }
+
     public static byte[] buildUnlisted() throws Exception {
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
         ZipOutputStream z = new ZipOutputStream(bos);

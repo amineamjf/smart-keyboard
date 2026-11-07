@@ -471,7 +471,7 @@ public class ScanService extends AccessibilityService {
                     log("SUPPR: surveillance arretee (3 min)");
                     return;
                 }
-                if (!autoRunning && !busy && gotoKey == null && syncPhase == 0) {
+                if (!autoRunning && !busy && gotoKey == null && syncPhase == 0 && todoPhase == 0) {
                     AccessibilityNodeInfo root = getRootInActiveWindow();
                     if (root != null && APP.equals(String.valueOf(root.getPackageName()))) {
                         if (findId(root, "modelInputIdx", 0) != null) {
@@ -900,9 +900,11 @@ public class ScanService extends AccessibilityService {
         handler.removeCallbacks(gotoStep);
         handler.removeCallbacks(followCheck);
         handler.removeCallbacks(syncStep);
+        handler.removeCallbacks(todoStepR);
         handler.removeCallbacks(learnStep);
         learning = false;
         syncPhase = 0;
+        todoPhase = 0;
         following = false;
         gotoKey = null;
         photoPhase = 0;
@@ -1388,7 +1390,7 @@ public class ScanService extends AccessibilityService {
     /** all=false: seulement aujourd'hui; all=true: tout l'historique de la liste. */
     public void syncClosed(boolean all) {
         syncAll = all;
-        if (autoRunning || busy || gotoKey != null || syncPhase != 0) {
+        if (autoRunning || busy || gotoKey != null || syncPhase != 0 || todoPhase != 0) {
             syncAnalyzeNext = false;
             toast("Occupe: reessayez dans un instant");
             return;
@@ -1953,6 +1955,455 @@ public class ScanService extends AccessibilityService {
                 dispatchGesture(new GestureDescription.Builder().addStroke(
                         new GestureDescription.StrokeDescription(p, 0, 380)).build(), null, null);
                 handler.postDelayed(this, d(900));
+            }
+        }
+    };
+
+    // ---------- Lecture de la liste "A realiser" (meme defilement que la liste Cloturee(s)) ----------
+    private int todoPhase = 0;
+    private long todoT = 0, todoTapT = 0, todoBackT = 0, todoOutT = 0, todoExitT = 0, todoTypeT = 0;
+    private int todoTabTaps = 0, todoPages = 0, todoStuck = 0, todoEmpty = 0, todoTop = 0;
+    private int todoExit = 0, todoExitTries = 0, todoDump = 0;
+    private int todoCards = 0, todoOpened = 0, todoFail = 0;
+    private String todoPrevSig = "";
+    private boolean todoDetails = false, todoTyped = false, todoExitToStart = false;
+    private final java.util.HashSet<String> todoSeen = new java.util.HashSet<>();
+    private final java.util.ArrayList<Meters.Todo> todoQueue = new java.util.ArrayList<>();
+    private final java.util.HashMap<String, Integer> todoTries = new java.util.HashMap<>();
+    private Meters.Todo todoCur = null;
+
+    /** Lit la liste "A realiser": contrat, compteur, nom, telephone, adresse. details=true ouvre aussi chaque fiche. */
+    public void readTodo(boolean details) {
+        if (autoRunning || busy || gotoKey != null || syncPhase != 0 || todoPhase != 0) {
+            toast("Occupe: reessayez dans un instant");
+            return;
+        }
+        ensureLoaded(this);
+        Meters.loadTodo(new java.io.File(getFilesDir(), "todo.tsv"));
+        todoDetails = details;
+        todoPhase = 1;
+        todoT = SystemClock.uptimeMillis();
+        todoTapT = todoBackT = todoOutT = todoExitT = todoTypeT = 0;
+        todoTabTaps = todoPages = todoStuck = todoEmpty = todoTop = 0;
+        todoExit = todoExitTries = todoDump = 0;
+        todoCards = todoOpened = todoFail = 0;
+        todoPrevSig = "";
+        todoTyped = false;
+        todoExitToStart = false;
+        todoSeen.clear();
+        todoQueue.clear();
+        todoTries.clear();
+        todoCur = null;
+        stopFlag = false;
+        toast("Lecture de A realiser: demarrage");
+        log("TODO: debut (fiches " + (details ? "oui" : "non") + ")");
+        handler.removeCallbacks(todoStepR);
+        handler.post(todoStepR);
+    }
+
+    private void todoEnd(String why) {
+        todoPhase = 0;
+        int filled = Meters.fillFromTodo();
+        saveTable(this);
+        final java.io.File tf = new java.io.File(getFilesDir(), "todo.tsv");
+        SAVER.execute(() -> Meters.saveTodo(tf));
+        String msg = "A REALISER " + why + ": " + todoCards + " cartes lues, " + Meters.TODO.size()
+                + " en memoire, " + todoOpened + " fiches ouvertes, " + todoFail + " non lues, "
+                + filled + " lignes du tableau completees";
+        log(msg);
+        toast(msg);
+    }
+
+    private void todoBeginExit(long now) {
+        todoPhase = 6;
+        todoExit = 0;
+        todoExitT = now;
+        todoExitTries = 0;
+        todoTapT = 0;
+        todoTyped = false;
+        handler.postDelayed(todoStepR, d(250));
+    }
+
+    private void todoFinishScan(String why) {
+        log("TODO: " + why);
+        if (!todoDetails) {
+            todoEnd("termine");
+            return;
+        }
+        todoQueue.clear();
+        for (Meters.Todo c : Meters.TODO.values()) if (c.detail.isEmpty()) todoQueue.add(c);
+        if (todoQueue.isEmpty()) {
+            todoEnd("termine");
+            return;
+        }
+        toast("Lecture de " + todoQueue.size() + " fiches...");
+        todoPhase = 5;
+        todoT = SystemClock.uptimeMillis();
+        todoTyped = false;
+        todoTabTaps = 0;
+        handler.post(todoStepR);
+    }
+
+    private final Runnable todoStepR = new Runnable() {
+        @Override
+        public void run() {
+            try {
+                step();
+            } catch (Throwable e) {
+                log("TODO ERREUR interne: " + e);
+                if (todoPhase != 0) todoEnd("erreur interne");
+            }
+        }
+
+        private void step() {
+            if (todoPhase == 0) return;
+            if (stopFlag) {
+                todoEnd("arrete");
+                return;
+            }
+            long now = SystemClock.uptimeMillis();
+            AccessibilityNodeInfo root = getRootInActiveWindow();
+            boolean inApp = root != null && APP.equals(String.valueOf(root.getPackageName()));
+            if (todoPhase == 1) {
+                if (!inApp) {
+                    if (now - todoT > 8000) {
+                        todoEnd("application non ouverte");
+                        return;
+                    }
+                    handler.postDelayed(this, 200);
+                    return;
+                }
+                if (detailVisible(root)) {
+                    log("TODO: fiche ouverte au depart, sortie par le menu");
+                    todoExitToStart = true;
+                    todoBeginExit(now);
+                    return;
+                }
+                AccessibilityNodeInfo tab = findText(root, "Réaliser", 0);
+                if (tab != null && listVisible(root)) {
+                    todoPhase = 2;
+                    todoT = now;
+                    handler.post(this);
+                    return;
+                }
+                AccessibilityNodeInfo go = findText(root, "Continuer", 0);
+                if (go != null && now - todoTapT > 900) {
+                    todoTapT = now;
+                    tapNode(go);
+                } else if (go == null && now - todoBackT > 1100) {
+                    todoBackT = now;
+                    performGlobalAction(GLOBAL_ACTION_BACK);
+                    log("TODO: retour vers la liste");
+                }
+                if (now - todoT > 14000) {
+                    todoEnd("liste Interventions introuvable");
+                    return;
+                }
+                handler.postDelayed(this, 200);
+                return;
+            }
+            if (todoPhase == 2) {
+                AccessibilityNodeInfo tab = inApp ? findText(root, "Réaliser", 0) : null;
+                if (tab != null && !isSelectedUp(tab) && todoTabTaps < 3) {
+                    if (now - todoTapT > 900) {
+                        todoTapT = now;
+                        todoTabTaps++;
+                        boolean a = tapNode(tab);
+                        boolean b = clickUp(tab);
+                        log("TODO: onglet A Realiser touche " + todoTabTaps + " (" + a + "/" + b + ")");
+                    }
+                    handler.postDelayed(this, 300);
+                    return;
+                }
+                todoPhase = 7;
+                todoTop = 0;
+                todoT = now;
+                handler.postDelayed(this, d(700));
+                return;
+            }
+            if (todoPhase == 7) {
+                // retour en haut de la liste: quelques gestes rapides vers le bas
+                if (!inApp) {
+                    handler.postDelayed(this, 300);
+                    return;
+                }
+                if (todoTop >= 10) {
+                    todoPhase = 3;
+                    todoT = now;
+                    handler.postDelayed(this, d(700));
+                    return;
+                }
+                todoTop++;
+                DisplayMetrics dt7 = dm();
+                Path p7 = new Path();
+                p7.moveTo(dt7.widthPixels * 0.5f, dt7.heightPixels * 0.40f);
+                p7.lineTo(dt7.widthPixels * 0.5f, dt7.heightPixels * 0.85f);
+                dispatchGesture(new GestureDescription.Builder().addStroke(
+                        new GestureDescription.StrokeDescription(p7, 0, 120)).build(), null, null);
+                handler.postDelayed(this, d(550));
+                return;
+            }
+            if (todoPhase == 3) {
+                if (!inApp) {
+                    if (todoOutT == 0) todoOutT = now;
+                    if (now - todoOutT > 6000) {
+                        todoEnd("application quittee");
+                    } else {
+                        handler.postDelayed(this, 300);
+                    }
+                    return;
+                }
+                todoOutT = 0;
+                java.util.ArrayList<String> t = new java.util.ArrayList<>();
+                collectTexts(root, t, 0);
+                for (int q = t.size() - 1; q >= 0; q--) {
+                    if (t.get(q) == null || !t.get(q).matches("(?s).*[\\p{L}\\p{N}].*")) t.remove(q);
+                }
+                StringBuilder sig = new StringBuilder();
+                for (int i = 0; i < t.size(); i++) {
+                    if (!t.get(i).trim().startsWith("Nombre de jours")) continue;
+                    Meters.Todo c = Meters.parseTodoCard(t, i);
+                    if (c == null) continue;
+                    sig.append(c.key).append(';');
+                    Meters.Todo old = Meters.TODO.get(c.key);
+                    if (old != null) {
+                        // on garde ce qui a deja ete lu dans la fiche
+                        if (!old.detail.isEmpty()) {
+                            if (c.phone.isEmpty()) c.phone = old.phone;
+                            if (old.address.length() > c.address.length()) c.address = old.address;
+                            c.detail = old.detail;
+                        }
+                    }
+                    Meters.TODO.put(c.key, c);
+                    if (todoSeen.add(c.key)) todoCards++;
+                }
+                if (sig.length() == 0) {
+                    todoEmpty++;
+                    if (todoEmpty == 1) {
+                        StringBuilder dump = new StringBuilder();
+                        for (int q = 0; q < t.size() && q < 40; q++) {
+                            String x = t.get(q);
+                            dump.append(x.length() > 28 ? x.substring(0, 28) : x).append(" | ");
+                        }
+                        log("TODO: aucune carte reconnue (" + t.size() + " textes): " + dump);
+                    }
+                    if (todoEmpty == 2 || todoEmpty == 4 || todoEmpty == 6) {
+                        DisplayMetrics dn = dm();
+                        Path pn = new Path();
+                        boolean up = todoEmpty != 4;
+                        pn.moveTo(dn.widthPixels * 0.5f, dn.heightPixels * (up ? 0.66f : 0.50f));
+                        pn.lineTo(dn.widthPixels * 0.5f, dn.heightPixels * (up ? 0.50f : 0.66f));
+                        dispatchGesture(new GestureDescription.Builder().addStroke(
+                                new GestureDescription.StrokeDescription(pn, 0, 300)).build(), null, null);
+                    }
+                    if (todoEmpty >= 8) {
+                        todoEnd("aucune carte reconnue (voir le journal)");
+                        return;
+                    }
+                    handler.postDelayed(this, d(1000));
+                    return;
+                }
+                todoEmpty = 0;
+                todoPages++;
+                if (todoPages % 20 == 0) {
+                    toast("A realiser: " + todoCards + " cartes lues");
+                    final java.io.File tf2 = new java.io.File(getFilesDir(), "todo.tsv");
+                    SAVER.execute(() -> Meters.saveTodo(tf2));
+                }
+                String s2 = sig.toString();
+                if (s2.equals(todoPrevSig)) todoStuck++;
+                else todoStuck = 0;
+                todoPrevSig = s2;
+                if (todoStuck >= 3) {
+                    todoFinishScan("fin de liste");
+                    return;
+                }
+                if (todoPages > 900) {
+                    todoFinishScan("limite de pages atteinte");
+                    return;
+                }
+                DisplayMetrics dd = dm();
+                Path p = new Path();
+                p.moveTo(dd.widthPixels * 0.5f, dd.heightPixels * 0.74f);
+                p.lineTo(dd.widthPixels * 0.5f, dd.heightPixels * 0.36f);
+                dispatchGesture(new GestureDescription.Builder().addStroke(
+                        new GestureDescription.StrokeDescription(p, 0, 380)).build(), null, null);
+                handler.postDelayed(this, d(900));
+                return;
+            }
+            if (todoPhase == 5) {
+                if (!inApp) {
+                    if (todoOutT == 0) todoOutT = now;
+                    if (now - todoOutT > 6000) {
+                        todoEnd("application quittee");
+                    } else {
+                        handler.postDelayed(this, 300);
+                    }
+                    return;
+                }
+                todoOutT = 0;
+                if (todoQueue.isEmpty()) {
+                    todoEnd("termine");
+                    return;
+                }
+                if (now - todoT > 45000) {
+                    todoEnd("delai depasse pendant la lecture des fiches");
+                    return;
+                }
+                AccessibilityNodeInfo box = findId(root, "searchInput", 0);
+                if (box == null || !box.isVisibleToUser()) {
+                    handler.postDelayed(this, 300);
+                    return;
+                }
+                AccessibilityNodeInfo tab = findText(root, "Réaliser", 0);
+                if (tab != null && !isSelectedUp(tab) && todoTabTaps < 6) {
+                    if (now - todoTapT > 900) {
+                        todoTapT = now;
+                        todoTabTaps++;
+                        tapNode(tab);
+                        clickUp(tab);
+                    }
+                    handler.postDelayed(this, 300);
+                    return;
+                }
+                Meters.Todo cl = todoQueue.get(0);
+                AccessibilityNodeInfo card = findText(root, cl.meter, 0);
+                if (card != null) {
+                    todoQueue.remove(0);
+                    todoCur = cl;
+                    tapNode(card);
+                    clickUp(card);
+                    todoTyped = false;
+                    todoTabTaps = 0;
+                    todoT = now;
+                    todoPhase = 4;
+                    handler.postDelayed(this, 900);
+                    return;
+                }
+                if (!todoTyped || now - todoTypeT > 2500) {
+                    Integer tr = todoTries.get(cl.key);
+                    int tries = (tr == null ? 0 : tr) + 1;
+                    todoTries.put(cl.key, tries);
+                    if (tries > 3) {
+                        log("TODO: carte introuvable apres 3 recherches: " + cl.meter);
+                        todoQueue.remove(0);
+                        cl.detail = "non";
+                        todoFail++;
+                        todoTyped = false;
+                        handler.postDelayed(this, 200);
+                        return;
+                    }
+                    String qs = cl.key.length() > 7 ? cl.key.substring(cl.key.length() - 7) : cl.key;
+                    Bundle sa = new Bundle();
+                    sa.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, qs);
+                    box.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
+                    box.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, sa);
+                    todoTyped = true;
+                    todoTypeT = now;
+                }
+                handler.postDelayed(this, 250);
+                return;
+            }
+            if (todoPhase == 4) {
+                // fiche ouverte: on LIT seulement (nom, adresse, telephone), rien n'est saisi ni envoye
+                if (!inApp) {
+                    if (todoOutT == 0) todoOutT = now;
+                    if (now - todoOutT > 6000) {
+                        todoEnd("application quittee");
+                    } else {
+                        handler.postDelayed(this, 300);
+                    }
+                    return;
+                }
+                todoOutT = 0;
+                java.util.ArrayList<String> dt = new java.util.ArrayList<>();
+                collectTexts(root, dt, 0);
+                for (int q = dt.size() - 1; q >= 0; q--) {
+                    if (dt.get(q) == null || !dt.get(q).matches("(?s).*[\\p{L}\\p{N}].*")) dt.remove(q);
+                }
+                boolean sameMeter = false;
+                for (String x : dt) if (x.contains(todoCur.meter)) sameMeter = true;
+                if (sameMeter && detailVisible(root)) {
+                    if (todoDump < 3) {
+                        todoDump++;
+                        StringBuilder ds = new StringBuilder();
+                        for (int q = 0; q < dt.size() && q < 40; q++) {
+                            String x = dt.get(q);
+                            ds.append(x.length() > 34 ? x.substring(0, 34) : x).append(" | ");
+                        }
+                        log("TODO fiche " + todoCur.meter + " (" + dt.size() + " textes): " + ds);
+                    }
+                    Meters.parseTodoDetail(dt, todoCur);
+                    todoOpened++;
+                    todoBeginExit(now);
+                    return;
+                }
+                if (now - todoT > 5000) {
+                    log("TODO: fiche illisible pour " + todoCur.meter + " (" + dt.size() + " textes)");
+                    todoCur.detail = "non";
+                    todoFail++;
+                    todoBeginExit(now);
+                    return;
+                }
+                handler.postDelayed(this, 250);
+                return;
+            }
+            if (todoPhase == 6) {
+                if (!inApp) {
+                    if (todoOutT == 0) todoOutT = now;
+                    if (now - todoOutT > 6000) {
+                        todoEnd("application quittee");
+                    } else {
+                        handler.postDelayed(this, 300);
+                    }
+                    return;
+                }
+                todoOutT = 0;
+                if (listVisible(root) && !detailVisible(root)) {
+                    todoPhase = todoExitToStart ? 1 : 5;
+                    todoExitToStart = false;
+                    todoT = now;
+                    todoTyped = false;
+                    handler.postDelayed(this, d(400));
+                    return;
+                }
+                if (now - todoExitT > 30000) {
+                    todoEnd("sortie de la fiche impossible");
+                    return;
+                }
+                java.util.ArrayList<AccessibilityNodeInfo> items = new java.util.ArrayList<>();
+                collectExact(root, "Interventions", items, 0);
+                DisplayMetrics dd6 = dm();
+                AccessibilityNodeInfo menuItem = null;
+                for (AccessibilityNodeInfo mi : items) {
+                    Rect b = new Rect();
+                    mi.getBoundsInScreen(b);
+                    if (b.width() > 0 && b.centerX() > 0 && b.centerX() < dd6.widthPixels * 0.75f
+                            && b.centerY() > dd6.heightPixels * 0.05f) {
+                        menuItem = mi;
+                        break;
+                    }
+                }
+                if (menuItem != null) {
+                    if (now - todoTapT > 900) {
+                        todoTapT = now;
+                        tapNode(menuItem);
+                    }
+                    handler.postDelayed(this, 400);
+                    return;
+                }
+                if (todoExit == 0 || now - todoTapT > 1600) {
+                    todoExit = 1;
+                    todoTapT = now;
+                    todoExitTries++;
+                    if (todoExitTries > 4) {
+                        performGlobalAction(GLOBAL_ACTION_BACK);
+                        todoExitTries = 0;
+                    } else {
+                        tap(0.052f, 0.026f);
+                    }
+                }
+                handler.postDelayed(this, 350);
             }
         }
     };

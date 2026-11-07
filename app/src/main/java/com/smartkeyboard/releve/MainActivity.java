@@ -378,6 +378,8 @@ public class MainActivity extends Activity {
                 final int n = Meters.importSheets(sheets);
                 if (Meters.lastWasClosed) {
                     Meters.saveClosed(new java.io.File(getFilesDir(), "closed.tsv"));
+                    Meters.saveTodo(new java.io.File(getFilesDir(), "todo.tsv"));
+                    if (Meters.fillFromTodo() > 0) ScanService.saveTable(this);
                 } else {
                     ScanService.saveTable(this);
                 }

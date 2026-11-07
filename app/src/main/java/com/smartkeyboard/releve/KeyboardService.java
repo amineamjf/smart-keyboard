@@ -1638,6 +1638,14 @@ public class KeyboardService extends InputMethodService {
                     () -> hideThen(() -> {
                         if (ScanService.instance != null) ScanService.instance.analyzeConso();
                     }));
+            pg.card(OptUi.DL, OptUi.TEAL, "\u00C0 r\u00E9aliser", "Lire la liste", -1,
+                    () -> hideThen(() -> {
+                        if (ScanService.instance != null) ScanService.instance.readTodo(false);
+                    }));
+            pg.card(OptUi.DL, OptUi.TEAL, "\u00C0 r\u00E9aliser + fiches", "Ouvre chaque fiche", -1,
+                    () -> hideThen(() -> {
+                        if (ScanService.instance != null) ScanService.instance.readTodo(true);
+                    }));
             pg.card(OptUi.PLUS, OptUi.AMBER, "Ajouter", "Nouveau compteur", -1, () -> {
                 if (noSvc()) return;
                 setInputView(buildMain());

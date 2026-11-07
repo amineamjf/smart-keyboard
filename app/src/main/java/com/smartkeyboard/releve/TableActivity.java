@@ -27,6 +27,7 @@ public class TableActivity extends Activity {
     private static final int REQ_XLSX = 13;
     private static final int REQ_UNL = 14;
     private static final int REQ_CLO = 15;
+    private static final int REQ_TODO = 16;
     private static final int REQ_LOG = 16;
     private static final int REQ_LOGF = 17;
     private static final int F_ALL = 0, F_SENT = 1, F_ORANGE = 2, F_ERR = 3, F_NEW = 4, F_UNL = 5, F_OUT = 6, F_PHOTO = 7, F_HIGH = 8, F_NEG = 9;
@@ -417,6 +418,10 @@ public class TableActivity extends Activity {
                     : (vd == Verdict.HIGH || vd == Verdict.ZERO) ? 0xFF9A5600 : 0xFF17803F;
             card.addView(infoLine("💧", "Consommation : " + cons, cc, true, 15));
         }
+        Meters.Todo tdo = Meters.TODO.get(r.key);
+        if (tdo != null && !tdo.phone.isEmpty()) {
+            card.addView(infoLine("📞", tdo.phone, 0xFF1F3D2E, false, 14));
+        }
         if (!r.tournee.isEmpty() || !r.photos.isEmpty()) {
             card.addView(infoLine("🗺", (r.tournee.isEmpty() ? "" : "Tournée " + r.tournee)
                     + (r.photos.isEmpty() ? "" : "   📷 photo"), 0xFF3B5546, false, 12));
@@ -568,6 +573,16 @@ public class TableActivity extends Activity {
             return;
         }
         createXlsx("non-repertories", REQ_UNL);
+    }
+
+    private void exportTodo() {
+        Meters.loadTodo(new java.io.File(getFilesDir(), "todo.tsv"));
+        if (Meters.TODO.isEmpty()) {
+            Toast.makeText(this, "Rien \u00E0 exporter: lancez d'abord \u00AB \u00C0 r\u00E9aliser \u00BB (clavier > Outils)",
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+        createXlsx("a-realiser", REQ_TODO);
     }
 
     private void exportClosed() {
@@ -908,6 +923,8 @@ public class TableActivity extends Activity {
                 "Tous les compteurs avec statuts", this::exportXlsx));
         box.addView(toolRow(d, "\uD83D\uDCE4", "Lectures de l'application (.xlsx)",
                 "Ce qui a \u00E9t\u00E9 lu dans l'application", this::exportClosed));
+        box.addView(toolRow(d, "\uD83D\uDCDE", "\u00C0 r\u00E9aliser (.xlsx)",
+                "Contrat, t\u00E9l\u00E9phone, adresse lus dans l'application", this::exportTodo));
         box.addView(toolRow(d, "\u2709", "Non r\u00E9pertori\u00E9s (.xlsx)",
                 Meters.countOffApp() + " compteur(s) \u00E0 transmettre", this::exportUnl));
         box.addView(toolRow(d, "\uD83D\uDCC4", "Rapport CSV", "Format texte simple", this::exportCsv));
@@ -927,6 +944,10 @@ public class TableActivity extends Activity {
     protected void onCreate(Bundle b) {
         super.onCreate(b);
         ScanService.ensureLoaded(this);
+        try {
+            Meters.loadTodo(new java.io.File(getFilesDir(), "todo.tsv"));
+        } catch (Throwable ignored) {
+        }
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(0xFFF3F5F8);
@@ -1149,11 +1170,13 @@ public class TableActivity extends Activity {
             }).start();
             return;
         }
-        if ((req != REQ_EXPORT && req != REQ_XLSX && req != REQ_UNL && req != REQ_CLO) || res != RESULT_OK || data == null
+        if ((req != REQ_EXPORT && req != REQ_XLSX && req != REQ_UNL && req != REQ_CLO && req != REQ_TODO) || res != RESULT_OK || data == null
                 || data.getData() == null) return;
         Uri uri = data.getData();
         try (OutputStream os = getContentResolver().openOutputStream(uri)) {
-            if (req == REQ_CLO) {
+            if (req == REQ_TODO) {
+                os.write(XlsxReport.buildTodo());
+            } else if (req == REQ_CLO) {
                 os.write(XlsxReport.buildClosed());
             } else if (req == REQ_UNL) {
                 os.write(XlsxReport.buildUnlisted());

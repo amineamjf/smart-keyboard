@@ -411,6 +411,165 @@ public final class Meters {
         return row[c].trim();
     }
 
+    // ---------- Liste "A realiser" (lue dans l'application d'origine) ----------
+
+    public static final class Todo {
+        public String key = "", ig = "", meter = "", contract = "", name = "", phone = "",
+                address = "", days = "", tournee = "", detail = "";
+    }
+
+    public static final java.util.concurrent.ConcurrentHashMap<String, Todo> TODO =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static final java.util.regex.Pattern PHONE = java.util.regex.Pattern.compile(
+            "^\\D{0,14}((?:\\+?212|0)[\\s.-]?[5-7](?:[\\s.-]?\\d){8})$");
+
+    /** Numero de telephone marocain contenu dans un texte court (ex. "Tel : 06 60 99 55 97"), sinon "". */
+    public static String phoneOf(String s) {
+        if (s == null) return "";
+        java.util.regex.Matcher m = PHONE.matcher(s.trim());
+        return m.matches() ? m.group(1).replaceAll("[^0-9+]", "") : "";
+    }
+
+    /**
+     * Carte de la liste "A realiser": lignes dans l'ordre IG, compteur, contrat, nom, [telephone], adresse,
+     * puis "Nombre de jours : N" (la ligne d'indice j). Retourne null si la carte est incomplete.
+     */
+    public static Todo parseTodoCard(List<String> t, int j) {
+        if (j < 5 || j >= t.size()) return null;
+        String addr = t.get(j - 1).trim();
+        int k = j - 2;
+        String phone = phoneOf(t.get(k));
+        if (!phone.isEmpty()) k--;
+        if (k < 3) return null;
+        String name = t.get(k).trim();
+        String contract = t.get(k - 1).trim();
+        String meter = t.get(k - 2).trim();
+        String ig = t.get(k - 3).trim();
+        if (contract.matches("[\\d\\s.,]{1,14}")) contract = contract.replaceAll("\\D", "");
+        if (!ig.matches("\\d{9,}.*") || !contract.matches("\\d{3,10}") || meter.isEmpty()) return null;
+        Todo c = new Todo();
+        c.key = key(meter);
+        if (c.key.isEmpty()) return null;
+        c.meter = meter;
+        c.ig = ig;
+        c.contract = contract;
+        c.name = name;
+        c.phone = phone;
+        c.address = addr;
+        c.days = t.get(j).replaceAll("\\D", "");
+        c.tournee = ig.substring(0, 7);
+        return c;
+    }
+
+    /** Completer une fiche avec ce qui est lu sur son ecran de detail (nom, adresse, telephone). */
+    public static void parseTodoDetail(List<String> dt, Todo c) {
+        for (int i = 0; i < dt.size(); i++) {
+            String x = dt.get(i) == null ? "" : dt.get(i).trim();
+            String lx = x.toLowerCase(Locale.ROOT);
+            if (lx.equals("nom") && i + 1 < dt.size()) {
+                String v = dt.get(i + 1).trim();
+                if (!v.isEmpty() && c.name.isEmpty()) c.name = v;
+            } else if (lx.equals("adresse") && i + 1 < dt.size()) {
+                String v = dt.get(i + 1).trim();
+                if (v.length() > c.address.length()) c.address = v;
+            }
+            if (c.phone.isEmpty()) c.phone = phoneOf(x);
+        }
+        c.detail = "oui";
+    }
+
+    /** Complete le tableau (contrat, nom, adresse vides) avec ce qui a ete lu dans la liste "A realiser". */
+    public static int fillFromTodo() {
+        int n = 0;
+        for (Todo t : TODO.values()) {
+            Row r = MAP.get(t.key);
+            if (r == null) continue;
+            boolean ch = false;
+            if (contractOf(r).isEmpty() && !t.contract.isEmpty()) {
+                r.contrat = t.contract;
+                ch = true;
+            }
+            if (nameOf(r).isEmpty() && !t.name.isEmpty()) {
+                r.client = t.name;
+                ch = true;
+            }
+            if (addressOf(r).isEmpty() && !t.address.isEmpty()) {
+                r.address = t.address;
+                ch = true;
+            }
+            if (ch) n++;
+        }
+        return n;
+    }
+
+    public static synchronized void saveTodo(File f) {
+        File tmp = new File(f.getPath() + ".tmp");
+        try (Writer w = new java.io.BufferedWriter(new OutputStreamWriter(new FileOutputStream(tmp), "UTF-8"), 65536)) {
+            for (Todo c : TODO.values()) {
+                w.write(clean(c.key) + "\t" + clean(c.ig) + "\t" + clean(c.meter) + "\t" + clean(c.contract) + "\t"
+                        + clean(c.name) + "\t" + clean(c.phone) + "\t" + clean(c.address) + "\t" + clean(c.days)
+                        + "\t" + clean(c.tournee) + "\t" + clean(c.detail) + "\n");
+            }
+            w.flush();
+            w.close();
+            if (!tmp.renameTo(f)) {
+                f.delete();
+                tmp.renameTo(f);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    public static void loadTodo(File f) {
+        if (!f.exists() || !TODO.isEmpty()) return;
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(f), "UTF-8"))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                String[] p = line.split("\t", -1);
+                if (p.length < 9) continue;
+                Todo c = new Todo();
+                c.key = p[0]; c.ig = p[1]; c.meter = p[2]; c.contract = p[3]; c.name = p[4];
+                c.phone = p[5]; c.address = p[6]; c.days = p[7]; c.tournee = p[8];
+                if (p.length > 9) c.detail = p[9];
+                if (!c.key.isEmpty()) TODO.put(c.key, c);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Restaure la liste "A realiser" depuis la feuille exportee. */
+    private static int importTodoSheet(List<String[]> rows, int h, String[] head, int cMeter) {
+        int cTour = colOf(head, "TOURNEE*"), cCon = colOf(head, "CONTRAT*", "N CONTRAT*");
+        int cName = colOf(head, "CLIENT*", "NOM*"), cTel = colOf(head, "TELEPHONE*");
+        int cAdr = colOf(head, "ADRESSE*"), cIg = colOf(head, "IG*"), cDays = colOf(head, "JOURS*");
+        int n = 0;
+        for (int i = h + 1; i < rows.size(); i++) {
+            String[] row = rows.get(i);
+            String meter = cell(row, cMeter);
+            String k = key(meter);
+            if (k.isEmpty()) continue;
+            Todo c = new Todo();
+            c.key = k;
+            c.meter = meter;
+            c.tournee = cell(row, cTour);
+            c.contract = cell(row, cCon);
+            c.name = cell(row, cName);
+            c.phone = cell(row, cTel);
+            c.address = cell(row, cAdr);
+            c.ig = cell(row, cIg);
+            c.days = cell(row, cDays);
+            c.detail = c.phone.isEmpty() ? "" : "oui";
+            TODO.put(k, c);
+            n++;
+        }
+        if (n == 0) throw new IllegalStateException("Aucune ligne dans la feuille");
+        lastWasClosed = true; // meme traitement que les lectures: le tableau n'est pas remplace
+        lastDup = 0;
+        lastReport = n + " interventions a realiser restaurees (contrat, telephone, adresse)";
+        return n;
+    }
+
     public static boolean lastWasClosed = false;
 
     /** Statut a partir de son libelle exporte (accents et casse ignores). */
@@ -468,6 +627,9 @@ public final class Meters {
                 int cOld = colOf(head, "ANCIEN INDEX*", "INDEX ANCIEN*", "ANC INDEX*",
                         "INDEX PRECEDENT*", "DERNIER INDEX*", "OLD INDEX*", "PREV INDEX*",
                         "ENCIEN INDEX*", "ANSIEN INDEX*", "ANCIN INDEX*", "ANCIAN INDEX*");
+                if (colOf(head, "TELEPHONE*") >= 0 && colOf(head, "STATUT") < 0 && colOf(head, "CONTROLE") < 0) {
+                    return importTodoSheet(rows, h, head, cCompteur);
+                }
                 if (colOf(head, "CONTROLE") >= 0 && colOf(head, "JOURS") >= 0
                         && colOf(head, "DATE HEURE") >= 0 && colOf(head, "STATUT") < 0) {
                     return importClosedSheet(rows, h, head, cCompteur);
