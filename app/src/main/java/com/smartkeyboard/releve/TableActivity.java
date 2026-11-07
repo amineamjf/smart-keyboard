@@ -27,7 +27,7 @@ public class TableActivity extends Activity {
     private static final int REQ_XLSX = 13;
     private static final int REQ_UNL = 14;
     private static final int REQ_CLO = 15;
-    private static final int REQ_TODO = 16;
+    private static final int REQ_TODO = 18;
     private static final int REQ_LOG = 16;
     private static final int REQ_LOGF = 17;
     private static final int F_ALL = 0, F_SENT = 1, F_ORANGE = 2, F_ERR = 3, F_NEW = 4, F_UNL = 5, F_OUT = 6, F_PHOTO = 7, F_HIGH = 8, F_NEG = 9;
