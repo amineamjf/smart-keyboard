@@ -85,8 +85,8 @@ public final class XlsxReport {
 
     private static final String[] HEAD = {"Tourn\u00E9e", "N° Compteur", "Client / Nom", "Adresse",
             "GPS (carte)", "N° Contrat", "Ancien index", "Nouvel index", "Consommation (m³)",
-            "Anomalie", "Annotation", "Statut", "Note", "Photo(s)"};
-    private static final double[] WIDTH = {16, 20, 30, 66, 24, 20, 14, 14, 16, 24, 24, 20, 44, 40};
+            "Anomalie", "Annotation", "Statut", "Note", "Photo(s)", "T\u00E9l\u00E9phone"};
+    private static final double[] WIDTH = {16, 20, 30, 66, 24, 20, 14, 14, 16, 24, 24, 20, 44, 40, 18};
 
     /** Cellule avec lien cliquable vers la carte (formule HYPERLINK, lue par Excel, LibreOffice, Sheets). */
     private static void link(StringBuilder sb, int col, int row, int style, String url, String label) {
@@ -138,8 +138,13 @@ public final class XlsxReport {
             sb.append("<row r=\"").append(r).append("\" ht=\"20\" customHeight=\"1\">");
             txt(sb, 0, r, t, m.tournee);
             txt(sb, 1, r, t, m.compteur);
-            txt(sb, 2, r, t, Meters.nameOf(m));
-            txt(sb, 3, r, t, Meters.addressOf(m));
+            Meters.Todo td = Meters.TODO.get(m.key);
+            String nm = Meters.nameOf(m);
+            String ad = Meters.addressOf(m);
+            if (nm.isEmpty() && td != null) nm = td.name;
+            if (ad.isEmpty() && td != null) ad = td.address;
+            txt(sb, 2, r, t, nm);
+            txt(sb, 3, r, t, ad);
             String[] ll = Meters.gpsOf(m);
             if (ll != null) {
                 link(sb, 4, r, band ? S_LINK_B : S_LINK,
@@ -147,7 +152,9 @@ public final class XlsxReport {
             } else {
                 txt(sb, 4, r, t, "");
             }
-            txt(sb, 5, r, t, Meters.contractOf(m));
+            String ct = Meters.contractOf(m);
+            if (ct.isEmpty() && td != null) ct = td.contract;
+            txt(sb, 5, r, t, ct);
             boolean oNum = isNum(m.oldIdx), nNum = isNum(m.newIdx);
             if (oNum) num(sb, 6, r, nu, Long.parseLong(m.oldIdx)); else txt(sb, 6, r, nu, m.oldIdx);
             int ns = m.newIdx.isEmpty() ? nu : S_NEWIDX;
@@ -166,11 +173,13 @@ public final class XlsxReport {
                     Meters.statusLabel(m.status) + (m.warn.isEmpty() ? "" : " \u2013 compteur diff\u00E9rent"));
             txt(sb, 12, r, t, m.note);
             txt(sb, 13, r, t, m.photos);
+            if (td != null && !td.phone.isEmpty()) link(sb, 14, r, band ? S_LINK_B : S_LINK, "tel:" + td.phone, td.phone);
+            else txt(sb, 14, r, t, "");
             sb.append("</row>");
         }
         sb.append("</sheetData>");
-        sb.append("<autoFilter ref=\"A4:N").append(lastRow).append("\"/>");
-        sb.append("<mergeCells count=\"2\"><mergeCell ref=\"A1:N1\"/><mergeCell ref=\"A2:N2\"/></mergeCells>");
+        sb.append("<autoFilter ref=\"A4:O").append(lastRow).append("\"/>");
+        sb.append("<mergeCells count=\"2\"><mergeCell ref=\"A1:O1\"/><mergeCell ref=\"A2:O2\"/></mergeCells>");
         sb.append("<pageMargins left=\"0.4\" right=\"0.4\" top=\"0.5\" bottom=\"0.5\" header=\"0.3\" footer=\"0.3\"/>");
         sb.append("<pageSetup paperSize=\"9\" orientation=\"landscape\" fitToWidth=\"1\" fitToHeight=\"0\"/>");
         sb.append("</worksheet>");
@@ -483,34 +492,49 @@ public final class XlsxReport {
         return bos.toByteArray();
     }
 
-    private static final String[] HEAD_TODO = {"Tourn\u00E9e", "N\u00B0 Compteur", "N\u00B0 Contrat", "Client",
-            "T\u00E9l\u00E9phone", "Adresse", "IG", "Jours"};
-    private static final double[] WIDTH_TODO = {16, 24, 16, 30, 18, 66, 30, 8};
+    private static final String[] HEAD_TODO = {"Tournée", "N° Compteur", "N° Contrat", "Client",
+            "Téléphone", "Adresse", "Carte", "Fiche", "Jours", "IG"};
+    private static final double[] WIDTH_TODO = {13, 24, 14, 30, 17, 62, 13, 16, 8, 28};
+
+    private static String mapUrl(String addr) {
+        try {
+            return "https://www.google.com/maps/search/?api=1&query=" + java.net.URLEncoder.encode(addr, "UTF-8");
+        } catch (Exception e) {
+            return "https://www.google.com/maps";
+        }
+    }
 
     private static String sheetTodo(java.util.ArrayList<Meters.Todo> list) {
         int n = list.size();
         int lastRow = 4 + Math.max(n, 1);
         int cols = HEAD_TODO.length;
         String lastCol = colName(cols - 1);
+        int withPhone = 0, read = 0;
+        for (Meters.Todo m : list) {
+            if (!m.phone.isEmpty()) withPhone++;
+            if (m.detail.equals("oui")) read++;
+        }
         StringBuilder sb = new StringBuilder();
         sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
         sb.append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
+        sb.append("<sheetPr><pageSetUpPr fitToPage=\"1\"/></sheetPr>");
         sb.append("<sheetViews><sheetView workbookViewId=\"0\" showGridLines=\"0\" tabSelected=\"1\">")
-                .append("<pane ySplit=\"4\" topLeftCell=\"A5\" activePane=\"bottomLeft\" state=\"frozen\"/>")
-                .append("<selection pane=\"bottomLeft\" activeCell=\"A5\" sqref=\"A5\"/></sheetView></sheetViews>");
-        sb.append("<sheetFormatPr defaultRowHeight=\"18\"/><cols>");
+                .append("<pane xSplit=\"2\" ySplit=\"4\" topLeftCell=\"C5\" activePane=\"bottomRight\" state=\"frozen\"/>")
+                .append("<selection pane=\"bottomRight\" activeCell=\"C5\" sqref=\"C5\"/></sheetView></sheetViews>");
+        sb.append("<sheetFormatPr defaultRowHeight=\"20\"/><cols>");
         for (int i = 0; i < cols; i++) {
             sb.append("<col min=\"").append(i + 1).append("\" max=\"").append(i + 1)
                     .append("\" width=\"").append(WIDTH_TODO[i]).append("\" customWidth=\"1\"/>");
         }
         sb.append("</cols><sheetData>");
         String date = new SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.FRANCE).format(new Date());
-        sb.append("<row r=\"1\" ht=\"34\" customHeight=\"1\">");
-        txt(sb, 0, 1, S_TITLE, "Interventions \u00E0 r\u00E9aliser (lues dans l'application)");
+        sb.append("<row r=\"1\" ht=\"36\" customHeight=\"1\">");
+        txt(sb, 0, 1, S_TITLE, "Interventions à réaliser");
         for (int c = 1; c < cols; c++) txt(sb, c, 1, S_TITLE, "");
         sb.append("</row>");
-        sb.append("<row r=\"2\" ht=\"20\" customHeight=\"1\">");
-        txt(sb, 0, 2, S_SUB, "G\u00E9n\u00E9r\u00E9 le " + date + "   |   " + n + " compteurs");
+        sb.append("<row r=\"2\" ht=\"22\" customHeight=\"1\">");
+        txt(sb, 0, 2, S_SUB, "Lu dans l'application le " + date + "   |   " + n + " compteurs   |   "
+                + withPhone + " avec téléphone   |   " + read + " fiches lues");
         for (int c = 1; c < cols; c++) txt(sb, c, 2, S_SUB, "");
         sb.append("</row>");
         sb.append("<row r=\"3\" ht=\"6\" customHeight=\"1\"/>");
@@ -520,16 +544,23 @@ public final class XlsxReport {
         int r = 5;
         for (int i = 0; i < n; i++, r++) {
             Meters.Todo m = list.get(i);
-            int t = (i % 2) == 1 ? S_TXT_B : S_TXT;
-            sb.append("<row r=\"").append(r).append("\" ht=\"20\" customHeight=\"1\">");
-            txt(sb, 0, r, t, m.tournee);
+            boolean band = (i % 2) == 1;
+            int t = band ? S_TXT_B : S_TXT;
+            sb.append("<row r=\"").append(r).append("\" ht=\"22\" customHeight=\"1\">");
+            txt(sb, 0, r, 13, m.tournee);
             txt(sb, 1, r, t, m.meter);
             txt(sb, 2, r, t, m.contract);
             txt(sb, 3, r, t, m.name);
-            txt(sb, 4, r, t, m.phone);
+            if (m.phone.isEmpty()) txt(sb, 4, r, 11, "—");
+            else link(sb, 4, r, band ? S_LINK_B : S_LINK, "tel:" + m.phone, m.phone);
             txt(sb, 5, r, t, m.address);
-            txt(sb, 6, r, t, m.ig);
-            txt(sb, 7, r, t, m.days);
+            if (m.address.isEmpty()) txt(sb, 6, r, t, "");
+            else link(sb, 6, r, band ? S_LINK_B : S_LINK, mapUrl(m.address), "Ouvrir");
+            if (m.detail.equals("oui")) txt(sb, 7, r, 8, "✔ lue");
+            else if (m.detail.equals("non")) txt(sb, 7, r, 9, "à revoir");
+            else txt(sb, 7, r, 11, "liste");
+            txt(sb, 8, r, t, m.days);
+            txt(sb, 9, r, t, m.ig);
             sb.append("</row>");
         }
         sb.append("</sheetData>");
@@ -537,6 +568,59 @@ public final class XlsxReport {
         sb.append("<mergeCells count=\"2\"><mergeCell ref=\"A1:").append(lastCol)
                 .append("1\"/><mergeCell ref=\"A2:").append(lastCol).append("2\"/></mergeCells>");
         sb.append("<pageMargins left=\"0.4\" right=\"0.4\" top=\"0.5\" bottom=\"0.5\" header=\"0.3\" footer=\"0.3\"/>");
+        sb.append("<pageSetup paperSize=\"9\" orientation=\"landscape\" fitToWidth=\"1\" fitToHeight=\"0\"/>");
+        sb.append("</worksheet>");
+        return sb.toString();
+    }
+
+    private static String sheetTodoSummary(java.util.ArrayList<Meters.Todo> list) {
+        java.util.TreeMap<String, int[]> by = new java.util.TreeMap<>();
+        for (Meters.Todo m : list) {
+            int[] a = by.get(m.tournee);
+            if (a == null) {
+                a = new int[3];
+                by.put(m.tournee, a);
+            }
+            a[0]++;
+            if (!m.phone.isEmpty()) a[1]++;
+            if (m.detail.equals("oui")) a[2]++;
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+        sb.append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
+        sb.append("<sheetViews><sheetView workbookViewId=\"0\" showGridLines=\"0\"/></sheetViews>");
+        sb.append("<sheetFormatPr defaultRowHeight=\"22\"/>");
+        sb.append("<cols><col min=\"1\" max=\"1\" width=\"18\" customWidth=\"1\"/>")
+                .append("<col min=\"2\" max=\"4\" width=\"18\" customWidth=\"1\"/></cols><sheetData>");
+        sb.append("<row r=\"1\" ht=\"36\" customHeight=\"1\">");
+        txt(sb, 0, 1, S_TITLE, "Résumé par tournée");
+        for (int c = 1; c < 4; c++) txt(sb, c, 1, S_TITLE, "");
+        sb.append("</row>");
+        sb.append("<row r=\"2\" ht=\"28\" customHeight=\"1\">");
+        String[] h = {"Tournée", "Compteurs", "Avec téléphone", "Fiches lues"};
+        for (int c = 0; c < 4; c++) txt(sb, c, 2, S_HEAD, h[c]);
+        sb.append("</row>");
+        int r = 3, t0 = 0, t1 = 0, t2 = 0;
+        for (java.util.Map.Entry<String, int[]> e : by.entrySet()) {
+            sb.append("<row r=\"").append(r).append("\" ht=\"22\" customHeight=\"1\">");
+            txt(sb, 0, r, 13, e.getKey());
+            num(sb, 1, r, S_VALUE, e.getValue()[0]);
+            num(sb, 2, r, S_VALUE, e.getValue()[1]);
+            num(sb, 3, r, S_VALUE, e.getValue()[2]);
+            sb.append("</row>");
+            t0 += e.getValue()[0];
+            t1 += e.getValue()[1];
+            t2 += e.getValue()[2];
+            r++;
+        }
+        sb.append("<row r=\"").append(r).append("\" ht=\"26\" customHeight=\"1\">");
+        txt(sb, 0, r, S_LABEL, "Total");
+        num(sb, 1, r, S_VALUE, t0);
+        num(sb, 2, r, S_VALUE, t1);
+        num(sb, 3, r, S_VALUE, t2);
+        sb.append("</row></sheetData>");
+        sb.append("<mergeCells count=\"1\"><mergeCell ref=\"A1:D1\"/></mergeCells>");
+        sb.append("<pageMargins left=\"0.7\" right=\"0.7\" top=\"0.75\" bottom=\"0.75\" header=\"0.3\" footer=\"0.3\"/>");
         sb.append("</worksheet>");
         return sb.toString();
     }
@@ -558,6 +642,7 @@ public final class XlsxReport {
                 + "<Default Extension=\"xml\" ContentType=\"application/xml\"/>"
                 + "<Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/>"
                 + "<Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>"
+                + "<Override PartName=\"/xl/worksheets/sheet2.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>"
                 + "<Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/>"
                 + "</Types>");
         put(z, "_rels/.rels",
@@ -570,18 +655,21 @@ public final class XlsxReport {
                 + "<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" "
                 + "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">"
                 + "<bookViews><workbookView activeTab=\"0\"/></bookViews>"
-                + "<sheets><sheet name=\"A realiser\" sheetId=\"1\" r:id=\"rId1\"/></sheets>"
-                + "<definedNames><definedName name=\"_xlnm._FilterDatabase\" localSheetId=\"0\" hidden=\"1\">'A realiser'!$A$4:$H$"
+                + "<sheets><sheet name=\"A realiser\" sheetId=\"1\" r:id=\"rId1\"/>"
+                + "<sheet name=\"Resume\" sheetId=\"2\" r:id=\"rId2\"/></sheets>"
+                + "<definedNames><definedName name=\"_xlnm._FilterDatabase\" localSheetId=\"0\" hidden=\"1\">'A realiser'!$A$4:$J$"
                 + (4 + Math.max(n, 1)) + "</definedName></definedNames>"
                 + "</workbook>");
         put(z, "xl/_rels/workbook.xml.rels",
                 "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
                 + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
                 + "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/>"
-                + "<Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/>"
+                + "<Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet2.xml\"/>"
+                + "<Relationship Id=\"rId3\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/>"
                 + "</Relationships>");
         put(z, "xl/styles.xml", styles());
         put(z, "xl/worksheets/sheet1.xml", sheetTodo(list));
+        put(z, "xl/worksheets/sheet2.xml", sheetTodoSummary(list));
         z.finish();
         z.close();
         return bos.toByteArray();
