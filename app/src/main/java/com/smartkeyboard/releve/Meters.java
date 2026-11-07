@@ -711,9 +711,10 @@ public final class Meters {
 
     public static String csv() {
         StringBuilder sb = new StringBuilder("﻿");
-        sb.append("Compteur;Client;Ancien index;Nouvel index;Anomalie;Annotation;Statut;Note\n");
+        sb.append("Tournée;Compteur;Client;Ancien index;Nouvel index;Anomalie;Annotation;Statut;Note\n");
         for (Row r : ROWS) {
-            sb.append(q(r.compteur)).append(';').append(q(r.client)).append(';')
+            sb.append(q(tourneeOf(r))).append(';');
+            sb.append(q(r.compteur)).append(';').append(q(nameOf(r))).append(';')
                     .append(q(r.oldIdx)).append(';').append(q(r.newIdx)).append(';')
                     .append(q(r.anomaly)).append(';').append(q(r.annotation)).append(';')
                     .append(q(statusLabel(r.status))).append(';').append(q(r.note)).append('\n');

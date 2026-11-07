@@ -136,7 +136,7 @@ public final class XlsxReport {
             int t = band ? S_TXT_B : S_TXT;
             int nu = band ? S_NUM_B : S_NUM;
             sb.append("<row r=\"").append(r).append("\" ht=\"20\" customHeight=\"1\">");
-            txt(sb, 0, r, t, m.tournee);
+            txt(sb, 0, r, t, Meters.tourneeOf(m));
             txt(sb, 1, r, t, m.compteur);
             txt(sb, 2, r, t, Meters.nameOf(m));
             txt(sb, 3, r, t, Meters.addressOf(m));
@@ -333,7 +333,7 @@ public final class XlsxReport {
             int t = band ? S_TXT_B : S_TXT;
             int nu = band ? S_NUM_B : S_NUM;
             sb.append("<row r=\"").append(r).append("\" ht=\"20\" customHeight=\"1\">");
-            txt(sb, 0, r, t, m.tournee);
+            txt(sb, 0, r, t, Meters.tourneeOf(m));
             txt(sb, 1, r, t, m.compteur);
             if (isNum(m.newIdx)) num(sb, 2, r, nu, Long.parseLong(m.newIdx));
             else txt(sb, 2, r, nu, m.newIdx);
