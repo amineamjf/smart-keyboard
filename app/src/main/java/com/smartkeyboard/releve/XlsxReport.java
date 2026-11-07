@@ -137,7 +137,7 @@ public final class XlsxReport {
             int nu = band ? S_NUM_B : S_NUM;
             sb.append("<row r=\"").append(r).append("\" ht=\"20\" customHeight=\"1\">");
             txt(sb, 0, r, t, m.tournee);
-            txt(sb, 1, r, t, m.compteur);
+            txt(sb, 1, r, t, nz(m.compteur));
             Meters.Todo td = Meters.TODO.get(m.key);
             String nm = Meters.nameOf(m);
             String ad = Meters.addressOf(m);
@@ -343,7 +343,7 @@ public final class XlsxReport {
             int nu = band ? S_NUM_B : S_NUM;
             sb.append("<row r=\"").append(r).append("\" ht=\"20\" customHeight=\"1\">");
             txt(sb, 0, r, t, m.tournee);
-            txt(sb, 1, r, t, m.compteur);
+            txt(sb, 1, r, t, nz(m.compteur));
             if (isNum(m.newIdx)) num(sb, 2, r, nu, Long.parseLong(m.newIdx));
             else txt(sb, 2, r, nu, m.newIdx);
             String addedTxt = m.added;
@@ -408,7 +408,7 @@ public final class XlsxReport {
             int nu = band ? S_NUM_B : S_NUM;
             sb.append("<row r=\"").append(r).append("\" ht=\"20\" customHeight=\"1\">");
             txt(sb, 0, r, t, m.tournee);
-            txt(sb, 1, r, t, m.meter);
+            txt(sb, 1, r, t, nz(m.meter));
             txt(sb, 2, r, t, m.ref);
             txt(sb, 3, r, t, m.name);
             txt(sb, 4, r, t, m.address);
@@ -496,6 +496,11 @@ public final class XlsxReport {
             "Téléphone", "Adresse", "Carte", "Fiche", "Jours", "IG"};
     private static final double[] WIDTH_TODO = {13, 24, 14, 30, 17, 62, 13, 16, 8, 28};
 
+    /** Numero de compteur sans zeros au debut. */
+    private static String nz(String v) {
+        return v == null ? "" : v.trim().replaceFirst("^0+(?=.)", "");
+    }
+
     private static String mapUrl(String addr) {
         try {
             return "https://www.google.com/maps/search/?api=1&query=" + java.net.URLEncoder.encode(addr, "UTF-8");
@@ -519,8 +524,8 @@ public final class XlsxReport {
         sb.append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
         sb.append("<sheetPr><pageSetUpPr fitToPage=\"1\"/></sheetPr>");
         sb.append("<sheetViews><sheetView workbookViewId=\"0\" showGridLines=\"0\" tabSelected=\"1\">")
-                .append("<pane xSplit=\"2\" ySplit=\"4\" topLeftCell=\"C5\" activePane=\"bottomRight\" state=\"frozen\"/>")
-                .append("<selection pane=\"bottomRight\" activeCell=\"C5\" sqref=\"C5\"/></sheetView></sheetViews>");
+                .append("<pane ySplit=\"4\" topLeftCell=\"A5\" activePane=\"bottomLeft\" state=\"frozen\"/>")
+                .append("<selection pane=\"bottomLeft\" activeCell=\"A5\" sqref=\"A5\"/></sheetView></sheetViews>");
         sb.append("<sheetFormatPr defaultRowHeight=\"20\"/><cols>");
         for (int i = 0; i < cols; i++) {
             sb.append("<col min=\"").append(i + 1).append("\" max=\"").append(i + 1)
@@ -548,7 +553,7 @@ public final class XlsxReport {
             int t = band ? S_TXT_B : S_TXT;
             sb.append("<row r=\"").append(r).append("\" ht=\"22\" customHeight=\"1\">");
             txt(sb, 0, r, 13, m.tournee);
-            txt(sb, 1, r, t, m.meter);
+            txt(sb, 1, r, t, nz(m.meter));
             txt(sb, 2, r, t, m.contract);
             txt(sb, 3, r, t, m.name);
             if (m.phone.isEmpty()) txt(sb, 4, r, 11, "—");
