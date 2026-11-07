@@ -1971,6 +1971,8 @@ public class ScanService extends AccessibilityService {
     private final java.util.ArrayList<Meters.Todo> todoQueue = new java.util.ArrayList<>();
     private final java.util.HashMap<String, Integer> todoTries = new java.util.HashMap<>();
     private Meters.Todo todoCur = null;
+    private boolean todoInline = false;
+    private long todoBackWaitT = 0;
 
     /** Lit la liste "A realiser": contrat, compteur, nom, telephone, adresse. details=true ouvre aussi chaque fiche. */
     public void readTodo(boolean details) {
@@ -1981,6 +1983,7 @@ public class ScanService extends AccessibilityService {
         ensureLoaded(this);
         Meters.loadTodo(new java.io.File(getFilesDir(), "todo.tsv"));
         todoDetails = details;
+        todoInline = details;
         todoPhase = 1;
         todoT = SystemClock.uptimeMillis();
         todoTapT = todoBackT = todoOutT = todoExitT = todoTypeT = 0;
@@ -2022,6 +2025,29 @@ public class ScanService extends AccessibilityService {
         todoTapT = 0;
         todoTyped = false;
         handler.postDelayed(todoStepR, d(250));
+    }
+
+    /** Apres lecture d'une fiche: retour par la touche Retour (le defilement est conserve) ou sortie par le menu. */
+    private void todoAfterRead(long now) {
+        if (!todoInline) {
+            todoBeginExit(now);
+            return;
+        }
+        todoPhase = 8;
+        todoBackWaitT = now;
+        todoOutT = 0;
+        performGlobalAction(GLOBAL_ACTION_BACK);
+        handler.postDelayed(todoStepR, d(700));
+    }
+
+    /** Le retour a perdu la position dans la liste: on lit les fiches restantes une par une (recherche). */
+    private void todoToQueueMode(long now, String why) {
+        log("TODO: " + why + " - lecture des fiches restantes par recherche");
+        todoInline = false;
+        todoQueue.clear();
+        for (Meters.Todo c : Meters.TODO.values()) if (c.detail.isEmpty()) todoQueue.add(c);
+        todoExitToStart = false;
+        todoBeginExit(now);
     }
 
     private void todoFinishScan(String why) {
@@ -2160,22 +2186,40 @@ public class ScanService extends AccessibilityService {
                     if (t.get(q) == null || !t.get(q).matches("(?s).*[\\p{L}\\p{N}].*")) t.remove(q);
                 }
                 StringBuilder sig = new StringBuilder();
+                java.util.ArrayList<String> shown = new java.util.ArrayList<>();
                 for (int i = 0; i < t.size(); i++) {
                     if (!t.get(i).trim().startsWith("Nombre de jours")) continue;
                     Meters.Todo c = Meters.parseTodoCard(t, i);
                     if (c == null) continue;
                     sig.append(c.key).append(';');
+                    shown.add(c.key);
                     Meters.Todo old = Meters.TODO.get(c.key);
                     if (old != null) {
                         // on garde ce qui a deja ete lu dans la fiche
                         if (!old.detail.isEmpty()) {
                             if (c.phone.isEmpty()) c.phone = old.phone;
-                            if (old.address.length() > c.address.length()) c.address = old.address;
+                            if (!old.address.isEmpty()) c.address = old.address;
                             c.detail = old.detail;
                         }
                     }
                     Meters.TODO.put(c.key, c);
                     if (todoSeen.add(c.key)) todoCards++;
+                }
+                if (todoDetails && todoInline && sig.length() > 0) {
+                    // on entre dans chaque carte visible dont la fiche n'a pas encore ete lue, puis on revient et on continue
+                    for (String k : shown) {
+                        Meters.Todo c2 = Meters.TODO.get(k);
+                        if (c2 == null || !c2.detail.isEmpty()) continue;
+                        AccessibilityNodeInfo node = findText(root, c2.meter, 0);
+                        if (node == null || !node.isVisibleToUser()) continue;
+                        todoCur = c2;
+                        tapNode(node);
+                        clickUp(node);
+                        todoPhase = 4;
+                        todoT = now;
+                        handler.postDelayed(this, 900);
+                        return;
+                    }
                 }
                 if (sig.length() == 0) {
                     todoEmpty++;
@@ -2335,17 +2379,47 @@ public class ScanService extends AccessibilityService {
                     }
                     Meters.parseTodoDetail(dt, todoCur);
                     todoOpened++;
-                    todoBeginExit(now);
+                    todoAfterRead(now);
                     return;
                 }
                 if (now - todoT > 5000) {
                     log("TODO: fiche illisible pour " + todoCur.meter + " (" + dt.size() + " textes)");
                     todoCur.detail = "non";
                     todoFail++;
-                    todoBeginExit(now);
+                    todoAfterRead(now);
                     return;
                 }
                 handler.postDelayed(this, 250);
+                return;
+            }
+            if (todoPhase == 8) {
+                if (!inApp) {
+                    if (todoOutT == 0) todoOutT = now;
+                    if (now - todoOutT > 6000) {
+                        todoEnd("application quittee");
+                    } else {
+                        handler.postDelayed(this, 300);
+                    }
+                    return;
+                }
+                todoOutT = 0;
+                if (listVisible(root) && !detailVisible(root)) {
+                    if (todoCur != null && findText(root, todoCur.meter, 0) == null) {
+                        todoToQueueMode(now, "position perdue apres le retour");
+                        return;
+                    }
+                    todoPrevSig = "";
+                    todoStuck = 0;
+                    todoPhase = 3;
+                    todoT = now;
+                    handler.postDelayed(this, d(500));
+                    return;
+                }
+                if (now - todoBackWaitT > 3000) {
+                    todoToQueueMode(now, "la touche Retour ne quitte pas la fiche");
+                    return;
+                }
+                handler.postDelayed(this, 300);
                 return;
             }
             if (todoPhase == 6) {

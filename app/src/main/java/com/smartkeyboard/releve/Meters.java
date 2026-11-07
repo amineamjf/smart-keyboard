@@ -472,7 +472,7 @@ public final class Meters {
                 if (!v.isEmpty() && c.name.isEmpty()) c.name = v;
             } else if (lx.equals("adresse") && i + 1 < dt.size()) {
                 String v = dt.get(i + 1).trim();
-                if (v.length() > c.address.length()) c.address = v;
+                if (!v.isEmpty()) c.address = v; // l'adresse de la fiche fait foi
             }
             if (c.phone.isEmpty()) c.phone = phoneOf(x);
         }
