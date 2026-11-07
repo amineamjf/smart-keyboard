@@ -568,4 +568,189 @@ public final class XlsxReport {
         z.close();
         return bos.toByteArray();
     }
+
+    // ---------- Export des compteurs restants (A realiser) ----------
+
+    private static final String REM_FLAG_HEAD = "Contrôle Smart Keyboard";
+
+    /** En-tetes d'origine du fichier importe; completes si une ligne a plus de cellules que l'en-tete. */
+    private static String[] remHeads(RemainingMeters.Result res) {
+        int n = res.heads.length;
+        for (Meters.Row r : res.remaining) if (r.cols != null && r.cols.length > n) n = r.cols.length;
+        if (n == 0) return new String[]{"N° Compteur", "Client", "N° Contrat"};
+        String[] h = new String[n];
+        for (int j = 0; j < n; j++) {
+            String v = j < res.heads.length ? res.heads[j] : "";
+            h[j] = v == null || v.trim().isEmpty() ? "Colonne " + (j + 1) : v;
+        }
+        return h;
+    }
+
+    /** Cellule d'origine telle qu'importee (texte brut, rien n'est reformate ni deduit). */
+    private static String remCell(Meters.Row r, int j, boolean fallback) {
+        if (fallback) return j == 0 ? r.compteur : (j == 1 ? r.client : Meters.contractOf(r));
+        return r.cols != null && j < r.cols.length && r.cols[j] != null ? r.cols[j] : "";
+    }
+
+    private static String sheetRemaining(RemainingMeters.Result res) {
+        final String[] heads = remHeads(res);
+        final boolean fallback = res.heads.length == 0 && heads.length == 3
+                && heads[0].equals("N° Compteur");
+        final int nc = heads.length;          // colonnes d'origine
+        final int total = nc + 1;             // + colonne de controle
+        final int n = res.remaining.size();
+        final String lastCol = colName(total - 1);
+        final int lastRow = 4 + Math.max(n, 1);
+
+        double[] w = new double[total];
+        for (int j = 0; j < nc; j++) {
+            int mx = heads[j].length();
+            for (Meters.Row m : res.remaining) mx = Math.max(mx, remCell(m, j, fallback).length());
+            w[j] = Math.min(60, Math.max(10, mx * 1.15 + 2));
+        }
+        w[nc] = 58;
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+        sb.append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
+        sb.append("<sheetPr><pageSetUpPr fitToPage=\"1\"/></sheetPr>");
+        sb.append("<sheetViews><sheetView workbookViewId=\"0\" showGridLines=\"0\" tabSelected=\"1\">")
+                .append("<pane ySplit=\"4\" topLeftCell=\"A5\" activePane=\"bottomLeft\" state=\"frozen\"/>")
+                .append("<selection pane=\"bottomLeft\" activeCell=\"A5\" sqref=\"A5\"/></sheetView></sheetViews>");
+        sb.append("<sheetFormatPr defaultRowHeight=\"18\"/>");
+        sb.append("<cols>");
+        for (int i = 0; i < total; i++) {
+            sb.append("<col min=\"").append(i + 1).append("\" max=\"").append(i + 1)
+                    .append("\" width=\"").append(w[i]).append("\" customWidth=\"1\"/>");
+        }
+        sb.append("</cols><sheetData>");
+
+        String date = new SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.FRANCE).format(new Date());
+        sb.append("<row r=\"1\" ht=\"34\" customHeight=\"1\">");
+        txt(sb, 0, 1, S_TITLE, "Compteurs restants à réaliser");
+        for (int c = 1; c < total; c++) txt(sb, c, 1, S_TITLE, "");
+        sb.append("</row>");
+        sb.append("<row r=\"2\" ht=\"20\" customHeight=\"1\">");
+        txt(sb, 0, 2, S_SUB, "Généré le " + date + "   |   " + n + " compteurs restants   |   "
+                + res.closedMatched + " clôturés exclus   |   "
+                + (res.ambiguous + res.sentNotClosed) + " à vérifier");
+        for (int c = 1; c < total; c++) txt(sb, c, 2, S_SUB, "");
+        sb.append("</row>");
+        sb.append("<row r=\"3\" ht=\"6\" customHeight=\"1\"/>");
+        sb.append("<row r=\"4\" ht=\"32\" customHeight=\"1\">");
+        for (int c = 0; c < nc; c++) txt(sb, c, 4, S_HEAD, heads[c]);
+        txt(sb, nc, 4, S_HEAD, REM_FLAG_HEAD);
+        sb.append("</row>");
+
+        int r = 5;
+        for (int i = 0; i < n; i++, r++) {
+            Meters.Row m = res.remaining.get(i);
+            int t = (i % 2) == 1 ? S_TXT_B : S_TXT;
+            sb.append("<row r=\"").append(r).append("\" ht=\"20\" customHeight=\"1\">");
+            // tout en texte: numeros de compteur, contrats et telephones gardent leurs zeros et leur forme
+            for (int c = 0; c < nc; c++) txt(sb, c, r, t, remCell(m, c, fallback));
+            String flag = res.flags.get(m);
+            txt(sb, nc, r, flag == null ? t : S_WARN, flag == null ? "" : flag);
+            sb.append("</row>");
+        }
+        sb.append("</sheetData>");
+        sb.append("<autoFilter ref=\"A4:").append(lastCol).append(lastRow).append("\"/>");
+        sb.append("<mergeCells count=\"2\"><mergeCell ref=\"A1:").append(lastCol).append("1\"/>")
+                .append("<mergeCell ref=\"A2:").append(lastCol).append("2\"/></mergeCells>");
+        sb.append("<pageMargins left=\"0.4\" right=\"0.4\" top=\"0.5\" bottom=\"0.5\" header=\"0.3\" footer=\"0.3\"/>");
+        sb.append("<pageSetup paperSize=\"9\" orientation=\"landscape\" fitToWidth=\"1\" fitToHeight=\"0\"/>");
+        sb.append("</worksheet>");
+        return sb.toString();
+    }
+
+    private static String sheetRemainingSummary(RemainingMeters.Result res) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+        sb.append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
+        sb.append("<sheetViews><sheetView workbookViewId=\"0\" showGridLines=\"0\"/></sheetViews>");
+        sb.append("<sheetFormatPr defaultRowHeight=\"20\"/>");
+        sb.append("<cols><col min=\"1\" max=\"1\" width=\"62\" customWidth=\"1\"/>")
+                .append("<col min=\"2\" max=\"2\" width=\"16\" customWidth=\"1\"/></cols><sheetData>");
+        sb.append("<row r=\"1\" ht=\"34\" customHeight=\"1\">");
+        txt(sb, 0, 1, S_TITLE, "Résumé");
+        txt(sb, 1, 1, S_TITLE, "");
+        sb.append("</row>");
+        sb.append("<row r=\"2\" ht=\"26\" customHeight=\"1\">");
+        txt(sb, 0, 2, S_HEAD, "Indicateur");
+        txt(sb, 1, 2, S_HEAD, "Nombre");
+        sb.append("</row>");
+        String[] lab = {
+                "Compteurs du tableau d'origine (sans doublons)",
+                "Enregistrements Clôturée(s) disponibles dans l'application",
+                "Compteurs clôturés (retrouvés dans le tableau, exclus)",
+                "Compteurs restants à réaliser (exportés)",
+                "   dont à vérifier : clôture ambiguë (contrat partagé)",
+                "   dont à vérifier : marqués envoyés mais absents de Clôturée(s)",
+                "Clôturés sans ligne dans le tableau d'origine (ignorés)",
+                "Doublons écartés (même numéro de compteur)"};
+        int[] val = {res.dbRows, res.closedEntries, res.closedMatched, res.remaining.size(),
+                res.ambiguous, res.sentNotClosed, res.closedNotInTable, res.duplicates};
+        int r = 3;
+        for (int i = 0; i < lab.length; i++, r++) {
+            sb.append("<row r=\"").append(r).append("\" ht=\"22\" customHeight=\"1\">");
+            txt(sb, 0, r, i == 3 ? S_LABEL : S_TXT, lab[i]);
+            num(sb, 1, r, S_VALUE, val[i]);
+            sb.append("</row>");
+        }
+        r++;
+        sb.append("<row r=\"").append(r).append("\"><c r=\"A").append(r).append("\" s=\"7\" t=\"inlineStr\"><is><t>")
+                .append("Méthode : restants = lignes d'origine - lignes clôturées. Rapprochement par numéro de ")
+                .append("compteur (synchro Clôturée(s)) ou par contrat unique (journal), jamais par ordre de lignes.")
+                .append("</t></is></c></row>");
+        sb.append("</sheetData>");
+        sb.append("<pageMargins left=\"0.7\" right=\"0.7\" top=\"0.75\" bottom=\"0.75\" header=\"0.3\" footer=\"0.3\"/>");
+        sb.append("</worksheet>");
+        return sb.toString();
+    }
+
+    /** Compteurs restants (a realiser): tout le contenu d'origine, sans rien inventer. */
+    public static byte[] buildRemaining(RemainingMeters.Result res) throws Exception {
+        final String[] heads = remHeads(res);
+        final int last = 4 + Math.max(res.remaining.size(), 1);
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        ZipOutputStream z = new ZipOutputStream(bos);
+        put(z, "[Content_Types].xml",
+                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+                + "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">"
+                + "<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>"
+                + "<Default Extension=\"xml\" ContentType=\"application/xml\"/>"
+                + "<Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/>"
+                + "<Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>"
+                + "<Override PartName=\"/xl/worksheets/sheet2.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>"
+                + "<Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/>"
+                + "</Types>");
+        put(z, "_rels/.rels",
+                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+                + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+                + "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/>"
+                + "</Relationships>");
+        put(z, "xl/workbook.xml",
+                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+                + "<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" "
+                + "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">"
+                + "<bookViews><workbookView activeTab=\"0\"/></bookViews>"
+                + "<sheets><sheet name=\"Compteurs restants\" sheetId=\"1\" r:id=\"rId1\"/>"
+                + "<sheet name=\"Resume\" sheetId=\"2\" r:id=\"rId2\"/></sheets>"
+                + "<definedNames><definedName name=\"_xlnm._FilterDatabase\" localSheetId=\"0\" hidden=\"1\">'Compteurs restants'!$A$4:$"
+                + colName(heads.length) + "$" + last + "</definedName></definedNames>"
+                + "</workbook>");
+        put(z, "xl/_rels/workbook.xml.rels",
+                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+                + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+                + "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/>"
+                + "<Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet2.xml\"/>"
+                + "<Relationship Id=\"rId3\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/>"
+                + "</Relationships>");
+        put(z, "xl/styles.xml", styles());
+        put(z, "xl/worksheets/sheet1.xml", sheetRemaining(res));
+        put(z, "xl/worksheets/sheet2.xml", sheetRemainingSummary(res));
+        z.finish();
+        z.close();
+        return bos.toByteArray();
+    }
 }

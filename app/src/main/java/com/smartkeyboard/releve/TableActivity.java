@@ -29,6 +29,7 @@ public class TableActivity extends Activity {
     private static final int REQ_CLO = 15;
     private static final int REQ_LOG = 16;
     private static final int REQ_LOGF = 17;
+    private static final int REQ_REM = 18;
     private static final int F_ALL = 0, F_SENT = 1, F_ORANGE = 2, F_ERR = 3, F_NEW = 4, F_UNL = 5, F_OUT = 6, F_PHOTO = 7, F_HIGH = 8, F_NEG = 9;
 
     private final ArrayList<Meters.Row> shown = new ArrayList<>();
@@ -565,6 +566,49 @@ public class TableActivity extends Activity {
         createXlsx("lectures-application", REQ_CLO);
     }
 
+    /** Resultat du calcul des compteurs restants (tableau d'origine - Cloturee(s)). */
+    private RemainingMeters.Result computeRemaining() {
+        return RemainingMeters.compute(Meters.ROWS, Meters.CLOSED.values(), Meters.HEADS);
+    }
+
+    /** Compteurs restants: verifie les donnees, montre les chiffres, puis propose l'export. */
+    private void exportRemaining() {
+        Meters.loadClosed(new java.io.File(getFilesDir(), "closed.tsv"));
+        final RemainingMeters.Result rr = computeRemaining();
+        if (rr.dbRows == 0) {
+            Toast.makeText(this, "Tableau vide: importez d'abord le tableau (Outils > Importer)",
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+        if (rr.noClosedData) {
+            new AlertDialog.Builder(this)
+                    .setTitle("Compteurs restants")
+                    .setMessage("Aucune donnée Clôturée(s) dans l'application: impossible de savoir quels "
+                            + "compteurs sont déjà faits.\n\nSynchronisez l'onglet Clôturée(s) "
+                            + "ou importez le journal (Outils > Dossier du journal), puis recommencez.")
+                    .setPositiveButton("OK", null)
+                    .show();
+            return;
+        }
+        StringBuilder m = new StringBuilder();
+        m.append("Tableau d'origine : ").append(rr.dbRows).append(" compteurs");
+        m.append("\nClôturés retrouvés : ").append(rr.closedMatched);
+        m.append("\nRestants à réaliser : ").append(rr.remaining.size());
+        if (rr.ambiguous > 0) m.append("\nÀ vérifier (contrat partagé) : ").append(rr.ambiguous);
+        if (rr.sentNotClosed > 0) {
+            m.append("\nÀ vérifier (envoyés, absents de Clôturée(s)) : ").append(rr.sentNotClosed);
+        }
+        m.append("\n\nComparez avec le nombre affiché dans « À Réaliser » de l'application d'origine. ")
+                .append("S'il diffère, la liste Clôturée(s) est peut-être incomplète: ")
+                .append("synchronisez-la d'abord.");
+        new AlertDialog.Builder(this)
+                .setTitle("Compteurs restants")
+                .setMessage(m.toString())
+                .setPositiveButton("Exporter", (d, w) -> createXlsx("compteurs-restants", REQ_REM))
+                .setNegativeButton("Annuler", null)
+                .show();
+    }
+
     private void exportCsv() {
         Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
         i.addCategory(Intent.CATEGORY_OPENABLE);
@@ -895,6 +939,8 @@ public class TableActivity extends Activity {
                 "Ce qui a \u00E9t\u00E9 lu dans l'application", this::exportClosed));
         box.addView(toolRow(d, "\u2709", "Non r\u00E9pertori\u00E9s (.xlsx)",
                 Meters.countOffApp() + " compteur(s) \u00E0 transmettre", this::exportUnl));
+        box.addView(toolRow(d, "\uD83D\uDCCB", "Compteurs restants (.xlsx)",
+                "\u00C0 r\u00E9aliser = tableau - Cl\u00F4tur\u00E9e(s)", this::exportRemaining));
         box.addView(toolRow(d, "\uD83D\uDCC4", "Rapport CSV", "Format texte simple", this::exportCsv));
         android.widget.ScrollView sv = new android.widget.ScrollView(this);
         sv.addView(box);
@@ -1134,11 +1180,14 @@ public class TableActivity extends Activity {
             }).start();
             return;
         }
-        if ((req != REQ_EXPORT && req != REQ_XLSX && req != REQ_UNL && req != REQ_CLO) || res != RESULT_OK || data == null
+        if ((req != REQ_EXPORT && req != REQ_XLSX && req != REQ_UNL && req != REQ_CLO && req != REQ_REM)
+                || res != RESULT_OK || data == null
                 || data.getData() == null) return;
         Uri uri = data.getData();
         try (OutputStream os = getContentResolver().openOutputStream(uri)) {
-            if (req == REQ_CLO) {
+            if (req == REQ_REM) {
+                os.write(XlsxReport.buildRemaining(computeRemaining()));
+            } else if (req == REQ_CLO) {
                 os.write(XlsxReport.buildClosed());
             } else if (req == REQ_UNL) {
                 os.write(XlsxReport.buildUnlisted());
