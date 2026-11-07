@@ -901,6 +901,11 @@ public class ScanService extends AccessibilityService {
         handler.removeCallbacks(followCheck);
         handler.removeCallbacks(syncStep);
         handler.removeCallbacks(todoStepR);
+        if (todoPhase != 0) {
+            // rien ne se perd: ce qui est lu est enregistre avant l'arret
+            final java.io.File tf0 = new java.io.File(getFilesDir(), "todo.tsv");
+            SAVER.execute(() -> Meters.saveTodo(tf0));
+        }
         handler.removeCallbacks(learnStep);
         learning = false;
         syncPhase = 0;
@@ -1972,6 +1977,20 @@ public class ScanService extends AccessibilityService {
     private final java.util.HashMap<String, Integer> todoTries = new java.util.HashMap<>();
     private Meters.Todo todoCur = null;
     private boolean todoInline = false;
+    private boolean todoSkipScan = false;
+    private int todoSaveN = 0;
+
+    private boolean todoHasUnread() {
+        for (Meters.Todo c : Meters.TODO.values()) if (c.detail.isEmpty()) return true;
+        return false;
+    }
+
+    /** Enregistre la liste lue sans attendre la fin (la session peut etre fermee a tout moment). */
+    private void todoSaveSoon(int every) {
+        if (++todoSaveN % every != 0) return;
+        final java.io.File tf3 = new java.io.File(getFilesDir(), "todo.tsv");
+        SAVER.execute(() -> Meters.saveTodo(tf3));
+    }
     private long todoBackWaitT = 0;
 
     /** Lit la liste "A realiser": contrat, compteur, nom, telephone, adresse. details=true ouvre aussi chaque fiche. */
@@ -1983,7 +2002,8 @@ public class ScanService extends AccessibilityService {
         ensureLoaded(this);
         Meters.loadTodo(new java.io.File(getFilesDir(), "todo.tsv"));
         todoDetails = details;
-        todoInline = details;
+        todoInline = false;   // le retour par la touche Retour n'est pas fiable: on utilise la sortie par le menu
+        todoSkipScan = details && todoHasUnread();
         todoPhase = 1;
         todoT = SystemClock.uptimeMillis();
         todoTapT = todoBackT = todoOutT = todoExitT = todoTypeT = 0;
@@ -2175,6 +2195,11 @@ public class ScanService extends AccessibilityService {
                     handler.postDelayed(this, 300);
                     return;
                 }
+                if (todoSkipScan) {
+                    todoSkipScan = false;
+                    todoFinishScan("reprise: lecture des fiches non lues");
+                    return;
+                }
                 todoPhase = 7;
                 todoTop = 0;
                 todoT = now;
@@ -2282,7 +2307,7 @@ public class ScanService extends AccessibilityService {
                 }
                 todoEmpty = 0;
                 todoPages++;
-                if (todoPages % 20 == 0) {
+                if (todoPages % 5 == 0) {
                     toast("A realiser: " + todoCards + " cartes lues");
                     final java.io.File tf2 = new java.io.File(getFilesDir(), "todo.tsv");
                     SAVER.execute(() -> Meters.saveTodo(tf2));
@@ -2353,7 +2378,7 @@ public class ScanService extends AccessibilityService {
                     todoTabTaps = 0;
                     todoT = now;
                     todoPhase = 4;
-                    handler.postDelayed(this, 900);
+                    handler.postDelayed(this, 500);
                     return;
                 }
                 if (!todoTyped || now - todoTypeT > 2500) {
@@ -2410,6 +2435,7 @@ public class ScanService extends AccessibilityService {
                     }
                     Meters.parseTodoDetail(dt, todoCur);
                     todoOpened++;
+                    todoSaveSoon(3);
                     todoAfterRead(now);
                     return;
                 }
@@ -2420,7 +2446,7 @@ public class ScanService extends AccessibilityService {
                     todoAfterRead(now);
                     return;
                 }
-                handler.postDelayed(this, 250);
+                handler.postDelayed(this, 150);
                 return;
             }
             if (todoPhase == 8) {
@@ -2467,7 +2493,7 @@ public class ScanService extends AccessibilityService {
                     todoExitToStart = false;
                     todoT = now;
                     todoTyped = false;
-                    handler.postDelayed(this, d(400));
+                    handler.postDelayed(this, d(120));
                     return;
                 }
                 if (now - todoExitT > 30000) {
@@ -4706,6 +4732,7 @@ public class ScanService extends AccessibilityService {
         @Override
         public void run() {
             stripPending = false;
+            if (todoPhase != 0) return;   // pendant la lecture de A realiser le bandeau ralentit tout
             if (learning) return;   // pendant l'apprentissage on ne partage pas la lecture de l'ecran avec le bandeau
             KeyboardService k = KeyboardService.instance;
             if (k == null || !KeyboardService.stripOn) return;
