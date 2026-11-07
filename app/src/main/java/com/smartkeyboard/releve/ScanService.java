@@ -2004,6 +2004,30 @@ public class ScanService extends AccessibilityService {
         handler.post(todoStepR);
     }
 
+    private long todoRelaunchT = 0;
+    private boolean todoResume = false;
+
+    /** L'application d'origine n'est plus a l'ecran: on attend, puis on la relance. Vrai = abandon. */
+    private boolean todoLost(long now) {
+        if (todoOutT == 0) todoOutT = now;
+        long w = now - todoOutT;
+        if (w > 30000) return true;
+        if (w > 8000 && now - todoRelaunchT > 9000) {
+            todoRelaunchT = now;
+            try {
+                android.content.Intent li = getPackageManager().getLaunchIntentForPackage(APP);
+                if (li != null) {
+                    li.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(li);
+                    todoResume = true;
+                }
+            } catch (Throwable ignored) {
+            }
+            log("TODO: application hors ecran, relance");
+        }
+        return false;
+    }
+
     private void todoEnd(String why) {
         todoPhase = 0;
         int filled = Meters.fillFromTodo();
@@ -2090,6 +2114,16 @@ public class ScanService extends AccessibilityService {
             long now = SystemClock.uptimeMillis();
             AccessibilityNodeInfo root = getRootInActiveWindow();
             boolean inApp = root != null && APP.equals(String.valueOf(root.getPackageName()));
+            if (todoResume && inApp) {
+                // l'application est revenue: on repart de la liste (ce qui est deja lu est conserve)
+                todoResume = false;
+                todoOutT = 0;
+                todoExitToStart = false;
+                todoPhase = 1;
+                todoT = now;
+                todoTabTaps = 0;
+                log("TODO: application revenue, reprise");
+            }
             if (todoPhase == 1) {
                 if (!inApp) {
                     if (now - todoT > 8000) {
@@ -2171,8 +2205,7 @@ public class ScanService extends AccessibilityService {
             }
             if (todoPhase == 3) {
                 if (!inApp) {
-                    if (todoOutT == 0) todoOutT = now;
-                    if (now - todoOutT > 6000) {
+                    if (todoLost(now)) {
                         todoEnd("application quittee");
                     } else {
                         handler.postDelayed(this, 300);
@@ -2277,8 +2310,7 @@ public class ScanService extends AccessibilityService {
             }
             if (todoPhase == 5) {
                 if (!inApp) {
-                    if (todoOutT == 0) todoOutT = now;
-                    if (now - todoOutT > 6000) {
+                    if (todoLost(now)) {
                         todoEnd("application quittee");
                     } else {
                         handler.postDelayed(this, 300);
@@ -2351,8 +2383,7 @@ public class ScanService extends AccessibilityService {
             if (todoPhase == 4) {
                 // fiche ouverte: on LIT seulement (nom, adresse, telephone), rien n'est saisi ni envoye
                 if (!inApp) {
-                    if (todoOutT == 0) todoOutT = now;
-                    if (now - todoOutT > 6000) {
+                    if (todoLost(now)) {
                         todoEnd("application quittee");
                     } else {
                         handler.postDelayed(this, 300);
@@ -2394,8 +2425,7 @@ public class ScanService extends AccessibilityService {
             }
             if (todoPhase == 8) {
                 if (!inApp) {
-                    if (todoOutT == 0) todoOutT = now;
-                    if (now - todoOutT > 6000) {
+                    if (todoLost(now)) {
                         todoEnd("application quittee");
                     } else {
                         handler.postDelayed(this, 300);
@@ -2424,8 +2454,7 @@ public class ScanService extends AccessibilityService {
             }
             if (todoPhase == 6) {
                 if (!inApp) {
-                    if (todoOutT == 0) todoOutT = now;
-                    if (now - todoOutT > 6000) {
+                    if (todoLost(now)) {
                         todoEnd("application quittee");
                     } else {
                         handler.postDelayed(this, 300);
