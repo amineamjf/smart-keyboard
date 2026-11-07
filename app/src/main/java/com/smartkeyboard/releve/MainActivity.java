@@ -376,8 +376,12 @@ public class MainActivity extends Activity {
             try (InputStream in = getContentResolver().openInputStream(uri)) {
                 List<List<String[]>> sheets = TableReader.read(in);
                 final int n = Meters.importSheets(sheets);
-                ScanService.saveTable(this);
-                msg = n + " compteurs importes"
+                if (Meters.lastWasClosed) {
+                    Meters.saveClosed(new java.io.File(getFilesDir(), "closed.tsv"));
+                } else {
+                    ScanService.saveTable(this);
+                }
+                msg = n + (Meters.lastWasClosed ? " lectures restaurees" : " compteurs importes")
                         + (Meters.lastDup > 0 ? " (" + Meters.lastDup + " doublons ignores)" : "")
                         + "\n" + Meters.lastReport;
             } catch (Throwable e) {

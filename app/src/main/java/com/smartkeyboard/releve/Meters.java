@@ -411,8 +411,53 @@ public final class Meters {
         return row[c].trim();
     }
 
+    public static boolean lastWasClosed = false;
+
+    /** Statut a partir de son libelle exporte (accents et casse ignores). */
+    private static int statusFromLabel(String label) {
+        String n = norm(label);
+        for (int i = 0; i <= UNLISTED; i++) if (norm(statusLabel(i)).equals(n)) return i;
+        return NEW;
+    }
+
+    /** Restaure les lectures de l'application (feuille exportee \u00AB Lectures de l'application \u00BB). */
+    private static int importClosedSheet(List<String[]> rows, int h, String[] head, int cMeter) {
+        int cTour = colOf(head, "TOURNEE*"), cRef = colOf(head, "REFERENCE*"), cCli = colOf(head, "CLIENT");
+        int cAdr = colOf(head, "ADRESSE*"), cDate = colOf(head, "DATE HEURE");
+        int cNew = colOf(head, "NOUVEL INDEX*"), cCons = colOf(head, "CONSOMMATION*");
+        int cDays = colOf(head, "JOURS"), cCtl = colOf(head, "CONTROLE");
+        int n = 0;
+        for (int i = h + 1; i < rows.size(); i++) {
+            String[] row = rows.get(i);
+            String meter = cell(row, cMeter);
+            String ref = cell(row, cRef);
+            String k = key(meter.isEmpty() ? ref : meter);
+            if (k.isEmpty()) continue;
+            Closed c = new Closed();
+            c.key = k;
+            c.meter = meter;
+            c.ref = ref;
+            c.name = cell(row, cCli);
+            c.address = cell(row, cAdr);
+            c.date = cell(row, cDate);
+            c.idx = cleanNumber(cell(row, cNew));
+            c.conso = cleanNumber(cell(row, cCons));
+            c.days = cell(row, cDays);
+            c.tournee = cell(row, cTour);
+            c.note = cell(row, cCtl);
+            CLOSED.put(k, c);
+            n++;
+        }
+        if (n == 0) throw new IllegalStateException("Aucune lecture dans la feuille");
+        lastWasClosed = true;
+        lastDup = 0;
+        lastReport = n + " lectures de l'application restaurees (consommations, analyse)";
+        return n;
+    }
+
     /** Remplace le tableau par le contenu des feuilles. Retourne le nombre de lignes. */
     public static int importSheets(List<List<String[]>> sheets) throws Exception {
+        lastWasClosed = false;
         for (List<String[]> rows : sheets) {
             for (int h = 0; h < rows.size() && h < 30; h++) {
                 String[] head = rows.get(h);
@@ -423,6 +468,13 @@ public final class Meters {
                 int cOld = colOf(head, "ANCIEN INDEX*", "INDEX ANCIEN*", "ANC INDEX*",
                         "INDEX PRECEDENT*", "DERNIER INDEX*", "OLD INDEX*", "PREV INDEX*",
                         "ENCIEN INDEX*", "ANSIEN INDEX*", "ANCIN INDEX*", "ANCIAN INDEX*");
+                if (colOf(head, "CONTROLE") >= 0 && colOf(head, "JOURS") >= 0
+                        && colOf(head, "DATE HEURE") >= 0 && colOf(head, "STATUT") < 0) {
+                    return importClosedSheet(rows, h, head, cCompteur);
+                }
+                int cSt = colOf(head, "STATUT");
+                int cNote = cSt < 0 ? -1 : colOf(head, "NOTE");
+                int cPh = cSt < 0 ? -1 : colOf(head, "PHOTO*");
                 int cAno = colOf(head, "ANOMALIE");
                 int cAnn = colOf(head, "ANNOTATION");
                 int cCli = colOf(head, "CLIENT", "NOM DU CLIENT*", "NOM CLIENT*", "NOM*");
@@ -450,6 +502,19 @@ public final class Meters {
                     r.newIdx = cleanNumber(cell(row, cNew));
                     r.anomaly = cell(row, cAno);
                     r.annotation = cell(row, cAnn);
+                    if (cSt >= 0) {
+                        String stTxt = cell(row, cSt);
+                        int dash = stTxt.indexOf(" \u2013 ");
+                        if (dash >= 0) {
+                            r.warn = "compteur different";
+                            stTxt = stTxt.substring(0, dash);
+                        }
+                        r.status = statusFromLabel(stTxt);
+                        r.extra = r.status == EXTRA;
+                        r.note = cell(row, cNote);
+                        r.photos = cell(row, cPh);
+                        if (r.status == UNLISTED) r.added = "import";
+                    }
                     r.cols = new String[row.length];
                     for (int j = 0; j < row.length; j++) r.cols[j] = row[j] == null ? "" : row[j].trim();
                     tmpRows.add(r);
