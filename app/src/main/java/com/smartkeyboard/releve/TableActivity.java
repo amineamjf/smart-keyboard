@@ -1010,6 +1010,9 @@ public class TableActivity extends Activity {
                 "Lecture automatique ensuite", this::pickLogDir));
         box.addView(toolRow(d, "\uD83D\uDDD2", "Choisir des fichiers du journal (.txt)",
                 "Un ou plusieurs fichiers", this::pickLogFiles));
+        box.addView(toolRow(d, "\uD83C\uDFA4", "Laboratoire vocal (test)",
+                "Dire un nombre en darija",
+                () -> startActivity(new Intent(this, VoiceLabActivity.class))));
         box.addView(toolRow(d, "\u2211", "Corriger les anciens index",
                 oldIndexFixes().size() + " \u00E0 corriger (d'apr\u00E8s la consommation)", this::fixOldIndexes));
         box.addView(toolRow(d, "\u2699", "Correction automatique des anciens index : " + (autoOldOn() ? "OUI" : "NON"),
