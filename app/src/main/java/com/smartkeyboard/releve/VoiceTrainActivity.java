@@ -496,9 +496,17 @@ public class VoiceTrainActivity extends Activity {
     }
 
     private void evaluate() {
-        VoiceModel m = VoiceStore.get(this);
-        List<String> errs = new ArrayList<>();
-        int[] r = m.selfTest(errs);
+        result.setText("Calcul en cours\u2026");
+        status.setText("");
+        new Thread(() -> {
+            final VoiceModel m = VoiceStore.get(this);
+            final List<String> errs = new ArrayList<>();
+            final int[] r = m.selfTest(errs);
+            runOnUiThread(() -> showEvaluation(m, errs, r));
+        }).start();
+    }
+
+    private void showEvaluation(VoiceModel m, List<String> errs, int[] r) {
         StringBuilder sb = new StringBuilder();
         if (r[1] == 0) {
             sb.append("Pas assez d'exemples : dites chaque mot au moins 2 fois.");

@@ -40,11 +40,13 @@ public final class VoiceModel {
         }
 
         public boolean sure() {
-            return !label.isEmpty() && !unknownGate && ratio() >= 1.12 && dist <= gate;
+            return !label.isEmpty() && !unknownGate && ratio() >= 1.06 && dist <= gate;
         }
     }
 
     private static final int MAX_PER_LABEL = 12;
+    /** Tolerance par rapport a la variation des propres enregistrements (la voix varie d'une session a l'autre). */
+    private static final double GATE = 2.0;
     /** Prefixe des enregistrements d'ordres entiers (ex. "cmd:bloque"); les autres sont des mots (chiffres). */
     public static final String CMD = "cmd:";
 
@@ -78,7 +80,7 @@ public final class VoiceModel {
     /** Limite acceptable pour un mot: 1,5 fois sa variation; sinon la moyenne generale du meme genre (mot/ordre). */
     private double gateFor(String label, boolean cmd) {
         double m = intraMean(label);
-        if (m > 0) return 1.5 * m;
+        if (m > 0) return GATE * m;
         double sum = 0;
         int n = 0;
         for (String k : words.keySet()) {
@@ -89,7 +91,7 @@ public final class VoiceModel {
                 n++;
             }
         }
-        return n == 0 ? Double.MAX_VALUE : 1.5 * sum / n;
+        return n == 0 ? Double.MAX_VALUE : GATE * sum / n;
     }
 
     public synchronized void add(String label, float[][] feat) {
@@ -174,17 +176,37 @@ public final class VoiceModel {
         return m;
     }
 
-    /** Auto-evaluation: chaque enregistrement est reconnu avec tous les autres (le sien exclu). Renvoie [bons, testes]. */
+    /**
+     * Auto-evaluation rapide: pour chaque mot (2 derniers enregistrements), comparaison avec les 4 modeles les plus recents
+     * des autres mots et avec les autres exemples du meme mot. Renvoie [bons, testes].
+     */
     public synchronized int[] selfTest(List<String> errors) {
         int ok = 0, n = 0;
         for (Map.Entry<String, List<float[][]>> e : words.entrySet()) {
             List<float[][]> l = e.getValue();
-            if (l.size() < 2) continue; // un seul exemple: on ne peut pas tester ce mot
-            for (int i = 0; i < l.size(); i++) {
-                Match m = classify(l.get(i), e.getKey(), i, e.getKey().startsWith(CMD));
+            if (l.size() < 2) continue;
+            boolean cmd = e.getKey().startsWith(CMD);
+            for (int t = Math.max(0, l.size() - 2); t < l.size(); t++) {
+                String bestLabel = "";
+                double bestD = Double.MAX_VALUE;
+                for (Map.Entry<String, List<float[][]>> o : words.entrySet()) {
+                    if (o.getKey().startsWith(CMD) != cmd) continue;
+                    List<float[][]> ol = o.getValue();
+                    boolean same = o.getKey().equals(e.getKey());
+                    int cnt = 0;
+                    for (int i = ol.size() - 1; i >= 0 && cnt < 4; i--) {
+                        if (same && i == t) continue;
+                        cnt++;
+                        double d = VoiceCore.dtw(l.get(t), ol.get(i));
+                        if (d < bestD) {
+                            bestD = d;
+                            bestLabel = o.getKey();
+                        }
+                    }
+                }
                 n++;
-                if (e.getKey().equals(m.label)) ok++;
-                else if (errors != null) errors.add(e.getKey() + " → " + m.label);
+                if (e.getKey().equals(bestLabel)) ok++;
+                else if (errors != null) errors.add(e.getKey() + " \u2192 " + bestLabel);
             }
         }
         return new int[]{ok, n};

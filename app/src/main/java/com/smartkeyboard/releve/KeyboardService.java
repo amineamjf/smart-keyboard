@@ -746,31 +746,34 @@ public class KeyboardService extends InputMethodService {
         }
         flashStrip("\uD83C\uDFA4 J'\u00E9coute\u2026");
         voice.once(pcm -> {
-            handleVoice(pcm);
+            flashStrip("\u2026");
+            new Thread(() -> handleVoice(pcm)).start();
             return false;
         });
     }
 
+    /** Calcul lourd sur un thread; toute action sur l'ecran repasse par le thread principal. */
     private void handleVoice(short[] pcm) {
         try {
             if (pcm == null || pcm.length == 0) {
-                flashStrip("Rien entendu");
+                showHandler.post(() -> flashStrip("Rien entendu"));
                 return;
             }
             VoiceModel m = VoiceStore.get(this);
-            java.util.List<VoiceCore.Span> spans = VoiceCore.split(pcm, 220, 90);
-            if (spans.isEmpty()) {
-                flashStrip("Rien entendu");
+            java.util.List<VoiceCore.Span> base = VoiceCore.split(pcm, 220, 90);
+            if (base.isEmpty()) {
+                showHandler.post(() -> flashStrip("Rien entendu"));
                 return;
             }
             String hint = "";
-            if (spans.size() <= 4) {
+            if (base.size() <= 4) {
                 java.util.List<VoiceCore.Span> one = VoiceCore.split(pcm, 700, 90);
                 if (!one.isEmpty()) {
                     VoiceModel.Match cm = m.classifyCommand(
                             VoiceCore.mfcc(pcm, one.get(0).from, one.get(one.size() - 1).to));
                     if (cm.sure()) {
-                        runVoiceCommand(cm.label.substring(VoiceModel.CMD.length()));
+                        final String id = cm.label.substring(VoiceModel.CMD.length());
+                        showHandler.post(() -> runVoiceCommand(id));
                         return;
                     }
                     if (!cm.label.isEmpty()) {
@@ -779,27 +782,54 @@ public class KeyboardService extends InputMethodService {
                     }
                 }
             }
-            StringBuilder joined = new StringBuilder();
-            boolean sure = true;
-            for (VoiceCore.Span s : spans) {
-                VoiceModel.Match r = m.classify(VoiceCore.mfcc(pcm, s.from, s.to));
-                if (r.label.isEmpty()) {
-                    sure = false;
-                    continue;
+            // On essaie plusieurs decoupages en mots et on garde le plus convaincant.
+            int[] gaps = {220, 160, 120, 300, 90};
+            String bestDigits = null;
+            double bestCost = Double.MAX_VALUE;
+            boolean bestOk = false;
+            int lastCount = -1;
+            for (int g : gaps) {
+                java.util.List<VoiceCore.Span> spans = VoiceCore.split(pcm, g, g < 120 ? 60 : 90);
+                if (spans.isEmpty() || spans.size() == lastCount && g != gaps[0]) continue;
+                lastCount = spans.size();
+                StringBuilder joined = new StringBuilder();
+                boolean sure = true;
+                double cost = 0;
+                for (VoiceCore.Span sp : spans) {
+                    VoiceModel.Match r = m.classify(VoiceCore.mfcc(pcm, sp.from, sp.to));
+                    if (r.label.isEmpty()) {
+                        sure = false;
+                        cost += 5;
+                        continue;
+                    }
+                    joined.append(r.label).append(' ');
+                    if (!r.sure()) sure = false;
+                    cost += Math.max(r.score(), 0.1) + (r.ratio() < 1.06 ? 1 : 0);
                 }
-                joined.append(r.label).append(' ');
-                if (!r.sure()) sure = false;
+                DarijaNumbers.Result nr = DarijaNumbers.parse(joined.toString().trim());
+                boolean ok = nr != null && nr.ok() && !nr.risky && sure;
+                if (nr == null || !nr.ok()) cost += 10;
+                if (ok && !bestOk || ok == bestOk && cost < bestCost) {
+                    bestOk = ok;
+                    bestCost = cost;
+                    bestDigits = nr != null && nr.ok() ? nr.digits : null;
+                }
+                if (ok) break;
             }
-            DarijaNumbers.Result nr = DarijaNumbers.parse(joined.toString().trim());
-            if (nr != null && nr.ok() && sure && !nr.risky) {
-                for (int i = 0; i < nr.digits.length(); i++) press(String.valueOf(nr.digits.charAt(i)));
-                flashStrip("\uD83C\uDFA4 " + nr.digits);
-            } else {
-                flashStrip("Incertain: " + (nr != null && nr.ok() ? nr.digits : "?")
-                        + (hint.isEmpty() ? "" : " | ordre? " + hint) + " \u2014 r\u00E9p\u00E9tez");
-            }
+            final String digits = bestDigits;
+            final boolean good = bestOk;
+            final String h = hint;
+            showHandler.post(() -> {
+                if (good && digits != null) {
+                    for (int i = 0; i < digits.length(); i++) press(String.valueOf(digits.charAt(i)));
+                    flashStrip("\uD83C\uDFA4 " + digits);
+                } else {
+                    flashStrip("Incertain: " + (digits != null ? digits : "?")
+                            + (h.isEmpty() ? "" : " | ordre? " + h) + " \u2014 r\u00E9p\u00E9tez");
+                }
+            });
         } catch (Throwable t) {
-            flashStrip("Erreur voix");
+            showHandler.post(() -> flashStrip("Erreur voix"));
         }
     }
 
