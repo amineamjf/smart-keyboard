@@ -75,24 +75,6 @@ public class VoiceTrainActivity extends Activity {
             {"a_realiser", "\u00C0 r\u00E9aliser"},
             {"journal", "Lire le journal"},
             {"stop", "Stop"}};
-
-    private final Handler ui = new Handler(Looper.getMainLooper());
-    private EditText phrase;
-    private TextView status, result, info;
-    private ProgressBar level;
-    private Button rec, modeBtn, learnBtn;
-    private boolean testMode = false;
-    private boolean cmdMode = false;
-    private int cmdIdx = 0;
-    private Button cmdBtn;
-    private LinearLayout row1;
-    /** Ordres vocaux: identifiant (utilise par le clavier) et nom affiche. */
-    static final String[][] COMMANDS = {
-            {"local", "Local inhabit\u00E9"},
-            {"bloque", "Compteur bloqu\u00E9"},
-            {"inaccessible", "Compteur inaccessible"},
-            {"photo", "Prendre la photo"},
-            {"stop", "Stop"}};
     private volatile boolean recording = false;
     private Thread recThread;
     private int phraseIdx = 0;
