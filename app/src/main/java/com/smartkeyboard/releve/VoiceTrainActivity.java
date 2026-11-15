@@ -39,9 +39,11 @@ public class VoiceTrainActivity extends Activity {
             "طناش تلطاش ربعطاش خمستاش ستاش سبعطاش تمنطاش تسعطاش",
             "عشرين تلاتين ربعين خمسين ستين سبعين تمانين تسعين",
             "ميا ميتين تلتمية ربعمية خمسمية ستمية سبعمية تمنمية تسعمية",
-            "ألف ألفين تلاتة ألاف صفر و",
-            "واحد و عشرين ، جوج و تلاتين ، تلاتة و ربعين",
-            "تلتمية و خمسين ، ربعمية و خمسة و خمسين"
+            "ألف ألفين تلاتة ألاف صفر",
+            "وواحد وجوج وتلاتة وربعة وخمسة وستة وسبعة وتمنية وتسعود",
+            "وعشرين وتلاتين وربعين وخمسين وستين وسبعين وتمانين وتسعين",
+            "تلتمية وخمسين ، ربعمية وخمسة وخمسين",
+            "واحد وعشرين ، جوج وتلاتين ، تلاتة وربعين"
     };
 
     private final Handler ui = new Handler(Looper.getMainLooper());
@@ -308,11 +310,19 @@ public class VoiceTrainActivity extends Activity {
 
     private static List<String> tokens(String t) {
         List<String> out = new ArrayList<>();
-        for (String w : t.replace('،', ' ').replace(',', ' ').trim().split("\\s+")) {
+        boolean waw = false;
+        for (String w : t.replace('\u060C', ' ').replace(',', ' ').trim().split("\\s+")) {
             if (w.isEmpty()) continue;
             String n = DarijaNumbers.norm(w);
-            out.add(n == null || n.isEmpty() ? w : n);
+            if (n == null || n.isEmpty()) n = w;
+            if (n.equals("\u0648")) { // "و" seul: se prononce colle au mot suivant
+                waw = true;
+                continue;
+            }
+            out.add(waw ? "\u0648" + n : n);
+            waw = false;
         }
+        if (waw) out.add("\u0648");
         return out;
     }
 
@@ -321,6 +331,10 @@ public class VoiceTrainActivity extends Activity {
         if (tk.isEmpty()) {
             status.setText("Écrivez d'abord les mots que vous allez dire.");
             return;
+        }
+        if (tk.size() != lastSpans.size()) {
+            List<VoiceCore.Span> alt = VoiceCore.splitTo(lastPcm, tk.size());
+            if (alt != null) lastSpans = alt;
         }
         if (tk.size() != lastSpans.size()) {
             status.setText("⚠ J'ai entendu " + lastSpans.size() + " mots mais vous en avez écrit " + tk.size()

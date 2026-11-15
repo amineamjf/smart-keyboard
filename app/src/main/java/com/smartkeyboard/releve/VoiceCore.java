@@ -175,6 +175,26 @@ public final class VoiceCore {
      * deux morceaux separes par moins de gapMs de calme restent un seul mot.
      */
     public static List<Span> split(short[] pcm, int gapMs, int minMs) {
+        return split(pcm, gapMs, minMs, 0.25);
+    }
+
+    /**
+     * Cherche un decoupage qui donne exactement le nombre de mots attendu (on essaie plusieurs durees de pause
+     * et plusieurs seuils). Renvoie null si aucun reglage ne convient.
+     */
+    public static List<Span> splitTo(short[] pcm, int expected) {
+        int[] gaps = {220, 160, 120, 90, 300, 400, 520, 700, 60};
+        double[] fr = {0.25, 0.18, 0.35, 0.12, 0.5};
+        for (double f : fr) {
+            for (int g : gaps) {
+                List<Span> r = split(pcm, g, g < 120 ? 60 : 90, f);
+                if (r.size() == expected) return r;
+            }
+        }
+        return null;
+    }
+
+    public static List<Span> split(short[] pcm, int gapMs, int minMs, double thrFrac) {
         double[] e = energies(pcm);
         List<Span> out = new ArrayList<>();
         if (e.length < 10) return out;
@@ -183,7 +203,7 @@ public final class VoiceCore {
         double floor = sorted[(int) (sorted.length * 0.1)];
         double peak = sorted[(int) (sorted.length * 0.97)];
         if (peak - floor < 12) return out; // rien d'audible
-        double thr = Math.max(floor + 8, floor + (peak - floor) * 0.25);
+        double thr = Math.max(floor + 8, floor + (peak - floor) * thrFrac);
         int gap = gapMs / 10, min = minMs / 10;
         int start = -1, last = -1;
         List<int[]> runs = new ArrayList<>();
