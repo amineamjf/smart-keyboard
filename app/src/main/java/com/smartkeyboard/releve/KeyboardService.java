@@ -587,11 +587,13 @@ public class KeyboardService extends InputMethodService {
                 if (cCam != null) cCam.setVisibility(View.GONE);
                 stMsg.setVisibility(View.VISIBLE);
                 stMsg.setText(flash ? flashMsg : (stripText.isEmpty() ? "-" : stripText));
+                stopGlow();
                 return;
             }
             stMsg.setVisibility(View.GONE);
 
             boolean alert = !dAlert.isEmpty();
+            if (!alert || flash) stopGlow();
             boolean cam = !alert && camHint;
             tNumL.setTextSize(alert || flash ? 11 : 9);
             cNum.setVisibility(showNum || alert || flash ? View.VISIBLE : View.GONE);
@@ -615,9 +617,9 @@ public class KeyboardService extends InputMethodService {
                 tNumV.setTextColor(S_NEW_TX);
             } else if (alert) {
                 tNumL.setText("\u26A0 SAUT\u00C9: " + dAlert + "  (toucher)");
-                cNum.setBackground(cellBg(S_SUS_BG, 0));
-                tNumL.setTextColor(S_SUS_TX);
-                tNumV.setTextColor(S_SUS_TX);
+                tNumL.setTextColor(0xFF4A2200);
+                tNumV.setTextColor(0xFF4A2200);
+                startGlow();
             } else {
                 tNumL.setText(dNote);
                 cNum.setBackground(cellBg(S_NUM_BG, 0));
@@ -657,6 +659,36 @@ public class KeyboardService extends InputMethodService {
 
     private String dAlert = "";
     private String dAlertNum = "";
+
+    private android.animation.ValueAnimator glowAnim;
+
+    /** Compteur du tableau saute par l'application: le bandeau pulse doucement en orange tant que l'alerte dure. */
+    private void startGlow() {
+        if (glowAnim != null) return;
+        cNum.setBackground(cellBg(0xFFFFD2A1, 0));
+        final android.animation.ArgbEvaluator ev = new android.animation.ArgbEvaluator();
+        glowAnim = android.animation.ValueAnimator.ofFloat(0f, 1f);
+        glowAnim.setDuration(1300);
+        glowAnim.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+        glowAnim.setRepeatMode(android.animation.ValueAnimator.REVERSE);
+        glowAnim.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
+        glowAnim.addUpdateListener(a -> {
+            float f = (Float) a.getAnimatedValue();
+            int fill = (Integer) ev.evaluate(f, 0xFFFFD2A1, 0xFFFF9E3D);
+            int edge = (Integer) ev.evaluate(f, 0x66FFB066, 0xFFFFE6C8);
+            GradientDrawable g = cellBg(fill, 0);
+            g.setStroke(dp(2), edge);
+            cNum.setBackground(g);
+        });
+        glowAnim.start();
+    }
+
+    private void stopGlow() {
+        if (glowAnim != null) {
+            glowAnim.cancel();
+            glowAnim = null;
+        }
+    }
 
     /** Alerte du bandeau: compteur du tableau non propose par l'application d'origine. */
     public void setStripAlert(String text, String num) {
