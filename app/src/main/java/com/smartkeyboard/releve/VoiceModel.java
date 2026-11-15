@@ -49,6 +49,13 @@ public final class VoiceModel {
     private static final double GATE = 2.0;
     /** Prefixe des enregistrements d'ordres entiers (ex. "cmd:bloque"); les autres sont des mots (chiffres). */
     public static final String CMD = "cmd:";
+    /** Prefixe des nombres entiers appris par l'usage (ex. "num:2000"). */
+    public static final String NUM = "num:";
+
+    /** 0 = mot (chiffre), 1 = ordre, 2 = nombre entier. */
+    static int kind(String label) {
+        return label.startsWith(CMD) ? 1 : label.startsWith(NUM) ? 2 : 0;
+    }
 
     private final LinkedHashMap<String, List<float[][]>> words = new LinkedHashMap<>();
     private final HashMap<String, Double> intra = new HashMap<>();
@@ -77,21 +84,29 @@ public final class VoiceModel {
         return v;
     }
 
-    /** Limite acceptable pour un mot: 1,5 fois sa variation; sinon la moyenne generale du meme genre (mot/ordre). */
-    private double gateFor(String label, boolean cmd) {
+    /** Limite acceptable: GATE fois la variation du mot; sinon moyenne du meme genre; sinon moyenne des autres genres. */
+    private double gateFor(String label, int kind) {
         double m = intraMean(label);
         if (m > 0) return GATE * m;
+        double v = avgIntra(kind);
+        if (v > 0) return GATE * v;
+        v = avgIntra(kind == 0 ? 1 : 0);
+        if (v == 0) v = avgIntra(kind == 2 ? 1 : 2);
+        return v > 0 ? v : Double.MAX_VALUE;
+    }
+
+    private double avgIntra(int kind) {
         double sum = 0;
         int n = 0;
         for (String k : words.keySet()) {
-            if (k.startsWith(CMD) != cmd) continue;
+            if (kind(k) != kind) continue;
             double x = intraMean(k);
             if (x > 0) {
                 sum += x;
                 n++;
             }
         }
-        return n == 0 ? Double.MAX_VALUE : GATE * sum / n;
+        return n == 0 ? 0 : sum / n;
     }
 
     public synchronized void add(String label, float[][] feat) {
@@ -135,7 +150,26 @@ public final class VoiceModel {
 
     /** Compare un mot a tous les modeles: meilleure distance par mot appris. */
     public synchronized Match classify(float[][] feat) {
-        return classify(feat, null, -1, false);
+        return classify(feat, null, -1, 0);
+    }
+
+    /** Nombre entier appris par l'usage; un seul enregistrement suffit si la distance est faible. */
+    public synchronized Match classifyNumber(float[][] feat) {
+        return classify(feat, null, -1, 2);
+    }
+
+    /** Les n ordres les plus proches (etiquettes "cmd:..."), du plus proche au plus lointain. */
+    public synchronized List<String> nearestCommands(float[][] feat, int n) {
+        final Map<String, Double> d = new HashMap<>();
+        for (Map.Entry<String, List<float[][]>> e : words.entrySet()) {
+            if (kind(e.getKey()) != 1) continue;
+            double best = Double.MAX_VALUE;
+            for (float[][] t : e.getValue()) best = Math.min(best, VoiceCore.dtw(feat, t));
+            if (best != Double.MAX_VALUE) d.put(e.getKey(), best);
+        }
+        List<String> l = new ArrayList<>(d.keySet());
+        Collections.sort(l, (a, b) -> Double.compare(d.get(a), d.get(b)));
+        return l.size() > n ? new ArrayList<>(l.subList(0, n)) : l;
     }
 
     /**
@@ -143,17 +177,17 @@ public final class VoiceModel {
      * de la variation normale de ses propres enregistrements (au moins 2 exemples), pour ne pas confondre avec des chiffres.
      */
     public synchronized Match classifyCommand(float[][] feat) {
-        Match m = classify(feat, null, -1, true);
+        Match m = classify(feat, null, -1, 1);
         if (m.label.isEmpty()) return m;
         List<float[][]> l = words.get(m.label);
         m.unknownGate = l == null || l.size() < 2; // un seul exemple: jamais "sur"
         return m;
     }
 
-    private Match classify(float[][] feat, String skipLabel, int skipIndex, boolean cmd) {
+    private Match classify(float[][] feat, String skipLabel, int skipIndex, int cmd) {
         Match m = new Match();
         for (Map.Entry<String, List<float[][]>> e : words.entrySet()) {
-            if (e.getKey().startsWith(CMD) != cmd) continue;
+            if (kind(e.getKey()) != cmd) continue;
             double best = Double.MAX_VALUE;
             List<float[][]> l = e.getValue();
             for (int i = 0; i < l.size(); i++) {
@@ -185,12 +219,12 @@ public final class VoiceModel {
         for (Map.Entry<String, List<float[][]>> e : words.entrySet()) {
             List<float[][]> l = e.getValue();
             if (l.size() < 2) continue;
-            boolean cmd = e.getKey().startsWith(CMD);
+            int cmd = kind(e.getKey());
             for (int t = Math.max(0, l.size() - 2); t < l.size(); t++) {
                 String bestLabel = "";
                 double bestD = Double.MAX_VALUE;
                 for (Map.Entry<String, List<float[][]>> o : words.entrySet()) {
-                    if (o.getKey().startsWith(CMD) != cmd) continue;
+                    if (kind(o.getKey()) != cmd) continue;
                     List<float[][]> ol = o.getValue();
                     boolean same = o.getKey().equals(e.getKey());
                     int cnt = 0;

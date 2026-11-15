@@ -766,21 +766,35 @@ public class KeyboardService extends InputMethodService {
                 return;
             }
             String hint = "";
-            if (base.size() <= 4) {
-                java.util.List<VoiceCore.Span> one = VoiceCore.split(pcm, 700, 90);
-                if (!one.isEmpty()) {
-                    VoiceModel.Match cm = m.classifyCommand(
-                            VoiceCore.mfcc(pcm, one.get(0).from, one.get(one.size() - 1).to));
-                    if (cm.sure()) {
-                        final String id = cm.label.substring(VoiceModel.CMD.length());
-                        showHandler.post(() -> runVoiceCommand(id));
-                        return;
-                    }
-                    if (!cm.label.isEmpty()) {
-                        hint = cm.label.substring(VoiceModel.CMD.length())
-                                + (cm.unknownGate ? " (1 seul exemple)" : " " + Math.round(cm.score() * 100) / 100.0);
-                    }
-                }
+            float[][] whole = null;
+            VoiceModel.Match nm = null, cm = null;
+            java.util.List<VoiceCore.Span> one = VoiceCore.split(pcm, 700, 90);
+            if (!one.isEmpty()) {
+                whole = VoiceCore.mfcc(pcm, one.get(0).from, one.get(one.size() - 1).to);
+                nm = m.classifyNumber(whole);
+                if (base.size() <= 4) cm = m.classifyCommand(whole);
+            }
+            final float[][] feat = whole;
+            boolean nOk = nm != null && nm.sure();
+            boolean cOk = cm != null && cm.sure();
+            if (nOk && (!cOk || nm.score() <= cm.score())) {
+                final String digits = nm.label.substring(VoiceModel.NUM.length());
+                showHandler.post(() -> {
+                    pendFeat = feat;
+                    pendTime = System.currentTimeMillis();
+                    for (int i = 0; i < digits.length(); i++) press(String.valueOf(digits.charAt(i)));
+                    flashStrip("\uD83C\uDFA4 " + digits);
+                });
+                return;
+            }
+            if (cOk) {
+                final String id = cm.label.substring(VoiceModel.CMD.length());
+                showHandler.post(() -> runVoiceCommand(id));
+                return;
+            }
+            if (cm != null && !cm.label.isEmpty()) {
+                hint = cm.label.substring(VoiceModel.CMD.length())
+                        + (cm.unknownGate ? " (1 seul exemple)" : " " + Math.round(cm.score() * 100) / 100.0);
             }
             // On essaie plusieurs decoupages en mots et on garde le plus convaincant.
             int[] gaps = {220, 160, 120, 300, 90};
@@ -819,17 +833,106 @@ public class KeyboardService extends InputMethodService {
             final String digits = bestDigits;
             final boolean good = bestOk;
             final String h = hint;
+            final java.util.List<String> near = feat == null ? new java.util.ArrayList<String>()
+                    : m.nearestCommands(feat, 3);
             showHandler.post(() -> {
+                pendFeat = feat;
+                pendTime = System.currentTimeMillis();
                 if (good && digits != null) {
                     for (int i = 0; i < digits.length(); i++) press(String.valueOf(digits.charAt(i)));
                     flashStrip("\uD83C\uDFA4 " + digits);
                 } else {
                     flashStrip("Incertain: " + (digits != null ? digits : "?")
-                            + (h.isEmpty() ? "" : " | ordre? " + h) + " \u2014 r\u00E9p\u00E9tez");
+                            + (h.isEmpty() ? "" : " | ordre? " + h));
+                    showPickPanel(digits, near, feat);
                 }
             });
         } catch (Throwable t) {
             showHandler.post(() -> flashStrip("Erreur voix"));
+        }
+    }
+
+    private float[][] pendFeat;
+    private long pendTime;
+
+    /** Apprentissage par l'usage: le nombre valide a la main est associe a ce que l'utilisateur vient de dire. */
+    private void learnTyped(String v) {
+        try {
+            float[][] f = pendFeat;
+            pendFeat = null;
+            if (f == null || System.currentTimeMillis() - pendTime > 60000) return;
+            if (v.length() == 0 || v.length() > 12) return;
+            for (int i = 0; i < v.length(); i++) if (!Character.isDigit(v.charAt(i))) return;
+            VoiceStore.get(this).add(VoiceModel.NUM + v, f);
+            final Context c = getApplicationContext();
+            new Thread(() -> VoiceStore.save(c)).start();
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void learnCommand(String id, float[][] f) {
+        try {
+            if (f == null) return;
+            VoiceStore.get(this).add(VoiceModel.CMD + id, f);
+            final Context c = getApplicationContext();
+            new Thread(() -> VoiceStore.save(c)).start();
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private String commandName(String label) {
+        for (String[] c : VoiceTrainActivity.COMMANDS) if ((VoiceModel.CMD + c[0]).equals(label)) return c[1];
+        return label.substring(VoiceModel.CMD.length());
+    }
+
+    /** Quand la reconnaissance hesite: l'utilisateur choisit ce qu'il voulait dire, et l'application l'apprend. */
+    private void showPickPanel(final String digits, final java.util.List<String> near, final float[][] feat) {
+        try {
+            final LinearLayout box = new LinearLayout(this);
+            box.setOrientation(LinearLayout.VERTICAL);
+            box.setBackgroundColor(C_STRIP_BG);
+            box.setPadding(dp(8), dp(8), dp(8), dp(8));
+            TextView t = new TextView(this);
+            t.setText("Qu'avez-vous dit ?  (l'application apprendra)");
+            t.setTextColor(C_STRIP_TXT);
+            t.setTextSize(14);
+            t.setTypeface(Typeface.DEFAULT_BOLD);
+            t.setGravity(Gravity.CENTER);
+            box.addView(t);
+            if (digits != null && digits.length() > 0) {
+                Button b = new Button(this);
+                b.setAllCaps(false);
+                b.setTextSize(18);
+                b.setText("\u2714  " + digits);
+                b.setOnClickListener(v -> {
+                    setInputView(buildMain());
+                    pendFeat = feat;
+                    pendTime = System.currentTimeMillis();
+                    for (int i = 0; i < digits.length(); i++) press(String.valueOf(digits.charAt(i)));
+                });
+                box.addView(b);
+            }
+            for (final String lab : near) {
+                Button b = new Button(this);
+                b.setAllCaps(false);
+                b.setTextSize(16);
+                b.setText("\u25B6  " + commandName(lab));
+                b.setOnClickListener(v -> {
+                    final String id = lab.substring(VoiceModel.CMD.length());
+                    learnCommand(id, feat);
+                    setInputView(buildMain());
+                    runVoiceCommand(id);
+                });
+                box.addView(b);
+            }
+            Button x = new Button(this);
+            x.setAllCaps(false);
+            x.setText("\u2716  Aucun (je tape \u00E0 la main)");
+            x.setOnClickListener(v -> setInputView(buildMain()));
+            box.addView(x);
+            setInputView(box);
+        } catch (Throwable t) {
+            // le clavier reste utilisable
         }
     }
 
@@ -2048,6 +2151,7 @@ public class KeyboardService extends InputMethodService {
             String v = buf.toString();
             // plus d'ecriture dans le presse-papiers: elle ecrasait ce que l'utilisateur copie
             if (v.length() > 0) {
+                learnTyped(v);
                 if (ScanService.instance == null) {
                     Toast.makeText(this, "Service d'accessibilite desactive", Toast.LENGTH_SHORT).show();
                 } else {
