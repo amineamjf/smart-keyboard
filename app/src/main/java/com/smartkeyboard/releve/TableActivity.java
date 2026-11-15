@@ -1016,6 +1016,7 @@ public class TableActivity extends Activity {
             case "\uD83D\uDCDE": return IconView.PHONE;
             case "\u2709": return IconView.MAIL;
             case "\uD83D\uDCC4": return IconView.FILE;
+            case "\uD83C\uDFA4": return IconView.MIC;
             case "\uD83D\uDCBE": return IconView.SAVE;
             case "\u267B": return IconView.RESTORE;
             case "\uD83D\uDCE8": return IconView.SHARE;
