@@ -1,8 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
     <queries>
         <package android:name="com.somei.smartmobility.srmrsk" />
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
     </queries>
 
     <application
@@ -23,6 +28,10 @@
 
         <activity
             android:name=".TableActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".VoiceLabActivity"
             android:exported="false" />
 
         <activity
