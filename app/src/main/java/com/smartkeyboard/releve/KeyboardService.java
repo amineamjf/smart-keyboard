@@ -809,6 +809,16 @@ public class KeyboardService extends InputMethodService {
             return;
         }
         switch (id) {
+            case "note_local":
+            case "note_bloque":
+            case "note_inaccessible":
+            case "note_absent": {
+                int k = id.equals("note_local") ? 0 : id.equals("note_bloque") ? 1
+                        : id.equals("note_inaccessible") ? 2 : 3;
+                String nm = sv.noteAnomaly(k);
+                flashStrip(nm);
+                return;
+            }
             case "placer": {
                 String pm = sv.moveCurrentAfterLast();
                 setInputView(buildMain());
@@ -1482,10 +1492,43 @@ public class KeyboardService extends InputMethodService {
         root.addView(makeKey("COMPTEUR INACCESSIBLE", C_AMBER, C_AMBER_SH, 0xFFFFFFFF, 17,
                 () -> runAnomaly(2)),
                 lp(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        root.addView(makeKey("NOTER SEULEMENT \u25B8", C_LIGHT, C_LIGHT_SH, C_TEXT, 14,
+                () -> setInputView(buildNoteMenu())),
+                lp(ViewGroup.LayoutParams.MATCH_PARENT, 0, 0.8f));
         root.addView(makeKey("\u2190 RETOUR", C_LIGHT, C_LIGHT_SH, C_TEXT, 15,
                 () -> setInputView(buildMain())),
                 lp(ViewGroup.LayoutParams.MATCH_PARENT, 0, 0.8f));
-        return wrapWithStrip(root, dp(4 * 64));
+        return wrapWithStrip(root, dp(5 * 60));
+    }
+
+    /** Note l'anomalie dans notre base (tableau et Excel) sans rien faire dans l'application d'origine. */
+    private void noteAnomaly(int kind) {
+        setInputView(buildMain());
+        if (ScanService.instance == null) {
+            flashStrip("Service d'accessibilit\u00E9 d\u00E9sactiv\u00E9");
+            return;
+        }
+        String m = ScanService.instance.noteAnomaly(kind);
+        Toast.makeText(this, m, Toast.LENGTH_SHORT).show();
+        flashStrip(m);
+    }
+
+    private View buildNoteMenu() {
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(C_BG);
+        root.setPadding(dp(6), dp(6), dp(6), dp(6));
+        String[] names = {"NOTER: LOCAL INHABIT\u00C9", "NOTER: COMPTEUR BLOQU\u00C9",
+                "NOTER: COMPTEUR INACCESSIBLE", "NOTER: ABONN\u00C9 ABSENT"};
+        for (int i = 0; i < names.length; i++) {
+            final int kind = i;
+            root.addView(makeKey(names[i], C_AMBER, C_AMBER_SH, 0xFFFFFFFF, 15, () -> noteAnomaly(kind)),
+                    lp(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        }
+        root.addView(makeKey("\u2190 RETOUR", C_LIGHT, C_LIGHT_SH, C_TEXT, 15,
+                () -> setInputView(buildAnomalyMenu())),
+                lp(ViewGroup.LayoutParams.MATCH_PARENT, 0, 0.8f));
+        return wrapWithStrip(root, dp(5 * 60));
     }
 
     // ---------- Page "Plus d'options" ----------

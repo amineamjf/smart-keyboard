@@ -2631,6 +2631,48 @@ public class ScanService extends AccessibilityService {
         startActivity(i);
     }
 
+    /**
+     * Note l'anomalie du compteur affiche dans NOTRE base (tableau, export Excel) sans rien toucher dans
+     * l'application d'origine. 0 = local inhabite, 1 = compteur bloque, 2 = inaccessible, 3 = abonne absent.
+     */
+    public String noteAnomaly(int kind) {
+        ensureLoaded(this);
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null || !APP.equals(String.valueOf(root.getPackageName()))) {
+            return "Ouvrez d'abord l'ecran Releve";
+        }
+        String id = readMeterId(root);
+        if (id.isEmpty()) return "Numero de compteur illisible";
+        Meters.Row r = lookupRow(root, id);
+        if (r == null) {
+            String label = meterLabel(root);
+            int i = label.indexOf(':');
+            String shown = i >= 0 ? label.substring(i + 1).trim() : label;
+            r = Meters.addExtra(shown.isEmpty() ? id : shown, id);
+        }
+        String what;
+        if (kind == 0) {
+            r.annotation = "LOCAL INHABITE";
+            what = "local inhabite";
+        } else if (kind == 3) {
+            r.annotation = "ABONNE ABSENT";
+            what = "abonne absent";
+        } else if (kind == 1) {
+            r.anomaly = "COMPTEUR BLOQUE";
+            what = "compteur bloque";
+            if (r.newIdx.isEmpty() && r.oldIdx.matches("\\d{1,9}")) r.newIdx = r.oldIdx;
+        } else {
+            r.anomaly = "COMPTEUR INACCESSIBLE";
+            what = "compteur inaccessible";
+        }
+        String stamp = new java.text.SimpleDateFormat("dd/MM HH:mm", java.util.Locale.FRANCE)
+                .format(new java.util.Date());
+        r.note = "anomalie notee (" + stamp + "), non envoyee" + (r.note.isEmpty() ? "" : " | " + r.note);
+        saveTable(this);
+        log("ANOMALIE notee dans la base: " + what + ", " + id);
+        return "\u2713 Not\u00E9 : " + what + " (" + id + ")";
+    }
+
     /** Bouton ANOMALIE du clavier: 0 = local inhabite, 1 = compteur bloque, 2 = inaccessible. */
     public void startManualAnomaly(int kind) {
         ensureLoaded(this);
@@ -2681,6 +2723,7 @@ public class ScanService extends AccessibilityService {
         if (kind == 0) r.annotation = "LOCAL INHABITE";
         else if (kind == 1) r.anomaly = "COMPTEUR BLOQUE";
         else r.anomaly = "COMPTEUR INACCESSIBLE";
+        saveTable(this);
         aSingle = true;
         aOvAnn = kind == 0 ? "LOCAL INHABITE" : null;
         aOvAnom = kind == 1 ? "COMPTEUR BLOQUE" : (kind == 2 ? "COMPTEUR INACCESSIBLE" : null);
