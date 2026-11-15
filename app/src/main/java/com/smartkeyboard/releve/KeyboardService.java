@@ -808,6 +808,56 @@ public class KeyboardService extends InputMethodService {
             flashStrip("\u23F9 Stop");
             return;
         }
+        switch (id) {
+            case "placer": {
+                String pm = sv.moveCurrentAfterLast();
+                setInputView(buildMain());
+                flashStrip(pm);
+                return;
+            }
+            case "annuler":
+                flashStrip(sv.undoMove());
+                return;
+            case "ok":
+                press("OK");
+                return;
+            case "efface":
+                press("<");
+                return;
+            case "rechercher":
+                search();
+                return;
+            case "dernier":
+                openLastSent();
+                return;
+            case "options":
+                setInputView(buildOptions());
+                return;
+            case "ajouter":
+                setInputView(buildMain());
+                sv.openAddMeter();
+                return;
+            case "apprendre":
+                hideThen(() -> {
+                    if (ScanService.instance != null) ScanService.instance.learnOrder();
+                });
+                return;
+            case "analyser_conso":
+                hideThen(() -> {
+                    if (ScanService.instance != null) ScanService.instance.analyzeConso();
+                });
+                return;
+            case "a_realiser":
+                hideThen(() -> {
+                    if (ScanService.instance != null) ScanService.instance.readTodo(false);
+                });
+                return;
+            case "journal":
+                LogAuto.run(this, true);
+                return;
+            default:
+                break;
+        }
         if (id.equals("local")) runAnomaly(0);
         else if (id.equals("bloque")) runAnomaly(1);
         else if (id.equals("inaccessible")) runAnomaly(2);
