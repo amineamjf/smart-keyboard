@@ -31,6 +31,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".VoiceTrainActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".VoiceLabActivity"
             android:exported="false" />
 

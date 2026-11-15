@@ -1016,7 +1016,8 @@ public class TableActivity extends Activity {
             case "\uD83D\uDCDE": return IconView.PHONE;
             case "\u2709": return IconView.MAIL;
             case "\uD83D\uDCC4": return IconView.FILE;
-            case "\uD83C\uDFA4": return IconView.MIC;
+            case "\uD83C\uDFA4":
+            case "\uD83C\uDF99": return IconView.MIC;
             case "\uD83D\uDCBE": return IconView.SAVE;
             case "\u267B": return IconView.RESTORE;
             case "\uD83D\uDCE8": return IconView.SHARE;
@@ -1117,8 +1118,11 @@ public class TableActivity extends Activity {
                 "Lecture automatique ensuite", this::pickLogDir));
         box.addView(toolRow(d, "\uD83D\uDDD2", "Choisir des fichiers du journal (.txt)",
                 "Un ou plusieurs fichiers", this::pickLogFiles));
-        box.addView(toolRow(d, "\uD83C\uDFA4", "Laboratoire vocal (test)",
-                "Dire un nombre en darija",
+        box.addView(toolRow(d, "\uD83C\uDF99", "Voix hors ligne (apprentissage)",
+                "Apprend votre voix, sans internet",
+                () -> startActivity(new Intent(this, VoiceTrainActivity.class))));
+        box.addView(toolRow(d, "\uD83C\uDFA4", "Laboratoire vocal Google (en ligne)",
+                "Test avec le service du t\u00E9l\u00E9phone",
                 () -> startActivity(new Intent(this, VoiceLabActivity.class))));
         box.addView(toolRow(d, "\u2211", "Corriger les anciens index",
                 oldIndexFixes().size() + " \u00E0 corriger (d'apr\u00E8s la consommation)", this::fixOldIndexes));
