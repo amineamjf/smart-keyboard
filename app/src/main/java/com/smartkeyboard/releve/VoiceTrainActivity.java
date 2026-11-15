@@ -52,6 +52,17 @@ public class VoiceTrainActivity extends Activity {
     private ProgressBar level;
     private Button rec, modeBtn, learnBtn;
     private boolean testMode = false;
+    private boolean cmdMode = false;
+    private int cmdIdx = 0;
+    private Button cmdBtn;
+    private LinearLayout row1;
+    /** Ordres vocaux: identifiant (utilise par le clavier) et nom affiche. */
+    static final String[][] COMMANDS = {
+            {"local", "Local inhabit\u00E9"},
+            {"bloque", "Compteur bloqu\u00E9"},
+            {"inaccessible", "Compteur inaccessible"},
+            {"photo", "Prendre la photo"},
+            {"stop", "Stop"}};
     private volatile boolean recording = false;
     private Thread recThread;
     private int phraseIdx = 0;
@@ -106,7 +117,16 @@ public class VoiceTrainActivity extends Activity {
 
         modeBtn = pill("", 0xFFEAF0FF, 0xFF2563EB);
         modeBtn.setOnClickListener(v -> {
-            testMode = !testMode;
+            if (!testMode && !cmdMode) {
+                testMode = true;
+            } else if (testMode) {
+                testMode = false;
+                cmdMode = true;
+            } else {
+                cmdMode = false;
+            }
+            status.setText("");
+            result.setText("");
             refresh();
         });
         LinearLayout.LayoutParams mp = new LinearLayout.LayoutParams(-1, -2);
@@ -125,7 +145,7 @@ public class VoiceTrainActivity extends Activity {
         pp.topMargin = dp(8);
         root.addView(phrase, pp);
 
-        LinearLayout row1 = new LinearLayout(this);
+        row1 = new LinearLayout(this);
         Button next = pill("Phrase suivante", 0xFFFFFFFF, 0xFF0F172A);
         next.setOnClickListener(v -> {
             phraseIdx = (phraseIdx + 1) % PHRASES.length;
@@ -140,6 +160,15 @@ public class VoiceTrainActivity extends Activity {
         LinearLayout.LayoutParams rl1 = new LinearLayout.LayoutParams(-1, -2);
         rl1.topMargin = dp(6);
         root.addView(row1, rl1);
+
+        cmdBtn = pill("", 0xFFFFFFFF, 0xFF0F172A);
+        cmdBtn.setOnClickListener(v -> {
+            cmdIdx = (cmdIdx + 1) % COMMANDS.length;
+            refresh();
+        });
+        LinearLayout.LayoutParams cbp = new LinearLayout.LayoutParams(-1, -2);
+        cbp.topMargin = dp(8);
+        root.addView(cmdBtn, cbp);
 
         rec = pill("🎤  Enregistrer", 0xFF2563EB, 0xFFFFFFFF);
         rec.setOnClickListener(v -> toggleRecord());
@@ -188,11 +217,18 @@ public class VoiceTrainActivity extends Activity {
     private void refresh() {
         VoiceModel m = VoiceStore.get(this);
         info.setText(m.counts().size() + " mots appris · " + m.total() + " enregistrements · 100 % hors ligne");
-        modeBtn.setText(testMode ? "Mode : TEST  (toucher pour apprendre)" : "Mode : APPRENTISSAGE  (toucher pour tester)");
-        phrase.setVisibility(View.VISIBLE);
+        modeBtn.setText(cmdMode ? "Mode : ORDRES  (toucher pour apprendre)"
+                : testMode ? "Mode : TEST  (toucher pour les ordres)" : "Mode : APPRENTISSAGE  (toucher pour tester)");
+        phrase.setVisibility(cmdMode ? View.GONE : View.VISIBLE);
+        row1.setVisibility(cmdMode ? View.GONE : View.VISIBLE);
+        cmdBtn.setVisibility(cmdMode ? View.VISIBLE : View.GONE);
+        cmdBtn.setText("Ordre : " + COMMANDS[cmdIdx][1] + "  (\u00D7" + m.count(VoiceModel.CMD + COMMANDS[cmdIdx][0])
+                + ")  \u2014 toucher pour changer");
         learnBtn.setVisibility(testMode && lastPcm != null ? View.VISIBLE : View.GONE);
         if (status.getText().length() == 0) {
-            status.setText(testMode
+            status.setText(cmdMode
+                    ? "Choisissez l'ordre, appuyez sur Enregistrer et dites-le comme vous le direz sur le terrain (3 fois au moins)."
+                    : testMode
                     ? "Dites des mots avec une courte pause entre chacun, l'application les reconnaît."
                     : "Dites exactement les mots écrits, avec une courte pause entre chacun.");
         }
@@ -301,7 +337,8 @@ public class VoiceTrainActivity extends Activity {
             refresh();
             return;
         }
-        if (testMode) recognize();
+        if (cmdMode) learnCommand();
+        else if (testMode) recognize();
         else learnFrom(phrase.getText().toString());
         refresh();
     }
@@ -354,6 +391,20 @@ public class VoiceTrainActivity extends Activity {
         result.setText(sb.toString());
     }
 
+    private void learnCommand() {
+        List<VoiceCore.Span> one = VoiceCore.split(lastPcm, 700, 90);
+        if (one.isEmpty()) {
+            status.setText("Rien d'audible d\u00E9tect\u00E9.");
+            return;
+        }
+        VoiceModel m = VoiceStore.get(this);
+        String id = VoiceModel.CMD + COMMANDS[cmdIdx][0];
+        m.add(id, VoiceCore.mfcc(lastPcm, one.get(0).from, one.get(one.size() - 1).to));
+        VoiceStore.save(this);
+        status.setText("\u2713 Ordre appris : " + COMMANDS[cmdIdx][1] + " (" + m.count(id) + " enregistrements)");
+        result.setText("");
+    }
+
     private void learnLast() {
         if (lastPcm == null) return;
         learnFrom(phrase.getText().toString());
@@ -365,6 +416,20 @@ public class VoiceTrainActivity extends Activity {
         if (m.total() == 0) {
             status.setText("Rien appris pour l'instant : passez en mode apprentissage.");
             return;
+        }
+        if (lastSpans.size() <= 4) {
+            List<VoiceCore.Span> one = VoiceCore.split(lastPcm, 700, 90);
+            if (!one.isEmpty()) {
+                VoiceModel.Match cm = m.classifyCommand(
+                        VoiceCore.mfcc(lastPcm, one.get(0).from, one.get(one.size() - 1).to));
+                if (cm.sure()) {
+                    String nm = cm.label;
+                    for (String[] c : COMMANDS) if ((VoiceModel.CMD + c[0]).equals(cm.label)) nm = c[1];
+                    result.setText("Ordre reconnu : " + nm);
+                    status.setText("(dans le clavier, cet ordre serait ex\u00E9cut\u00E9)");
+                    return;
+                }
+            }
         }
         StringBuilder sb = new StringBuilder();
         StringBuilder joined = new StringBuilder();

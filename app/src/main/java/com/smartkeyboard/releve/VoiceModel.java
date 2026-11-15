@@ -34,6 +34,8 @@ public final class VoiceModel {
     }
 
     private static final int MAX_PER_LABEL = 12;
+    /** Prefixe des enregistrements d'ordres entiers (ex. "cmd:bloque"); les autres sont des mots (chiffres). */
+    public static final String CMD = "cmd:";
 
     private final LinkedHashMap<String, List<float[][]>> words = new LinkedHashMap<>();
 
@@ -75,12 +77,44 @@ public final class VoiceModel {
 
     /** Compare un mot a tous les modeles: meilleure distance par mot appris. */
     public synchronized Match classify(float[][] feat) {
-        return classify(feat, null, -1);
+        return classify(feat, null, -1, false);
     }
 
-    private Match classify(float[][] feat, String skipLabel, int skipIndex) {
+    /**
+     * Compare un enonce entier aux ordres appris (cmd:...). Un ordre n'est retenu que si la distance reste proche
+     * de la variation normale de ses propres enregistrements (au moins 2 exemples), pour ne pas confondre avec des chiffres.
+     */
+    public synchronized Match classifyCommand(float[][] feat) {
+        Match m = classify(feat, null, -1, true);
+        if (m.label.isEmpty()) return m;
+        List<float[][]> l = words.get(m.label);
+        if (l == null || l.size() < 2) {
+            m.secondDist = m.dist; // un seul exemple: jamais "sur"
+            return m;
+        }
+        double sum = 0;
+        int n = 0;
+        for (int i = 0; i < l.size(); i++) {
+            for (int j = i + 1; j < l.size(); j++) {
+                double d = VoiceCore.dtw(l.get(i), l.get(j));
+                if (d != Double.MAX_VALUE) {
+                    sum += d;
+                    n++;
+                }
+            }
+        }
+        double gate = n == 0 ? 0 : 1.4 * sum / n;
+        if (m.dist > gate) {
+            m.secondDist = m.dist; // trop loin des exemples: rejete
+            m.second = m.label;
+        }
+        return m;
+    }
+
+    private Match classify(float[][] feat, String skipLabel, int skipIndex, boolean cmd) {
         Match m = new Match();
         for (Map.Entry<String, List<float[][]>> e : words.entrySet()) {
+            if (e.getKey().startsWith(CMD) != cmd) continue;
             double best = Double.MAX_VALUE;
             List<float[][]> l = e.getValue();
             for (int i = 0; i < l.size(); i++) {
@@ -109,7 +143,7 @@ public final class VoiceModel {
             List<float[][]> l = e.getValue();
             if (l.size() < 2) continue; // un seul exemple: on ne peut pas tester ce mot
             for (int i = 0; i < l.size(); i++) {
-                Match m = classify(l.get(i), e.getKey(), i);
+                Match m = classify(l.get(i), e.getKey(), i, e.getKey().startsWith(CMD));
                 n++;
                 if (e.getKey().equals(m.label)) ok++;
                 else if (errors != null) errors.add(e.getKey() + " → " + m.label);

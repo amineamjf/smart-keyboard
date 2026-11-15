@@ -885,6 +885,11 @@ public class ScanService extends AccessibilityService {
 
     // ---------- Envoi du releve ----------
 
+    /** Vrai si une automatisation ou une action (anomalie, photo) est en cours. */
+    public boolean isBusyNow() {
+        return busy || autoRunning;
+    }
+
     public void stopAll() {
         stopFlag = true;
         autoRunning = false;

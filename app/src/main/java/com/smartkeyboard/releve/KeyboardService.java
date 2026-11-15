@@ -705,6 +705,142 @@ public class KeyboardService extends InputMethodService {
         renderStrip();
     }
 
+    // ---------- Voix hors ligne (touche micro) ----------
+
+    private VoiceInput voice;
+    private int guardIdle = 0;
+    private long guardStart = 0;
+
+    private final Runnable guardWatch = new Runnable() {
+        @Override
+        public void run() {
+            if (voice == null || !voice.isRunning()) return;
+            boolean busyNow = ScanService.instance != null && ScanService.instance.isBusyNow();
+            long age = android.os.SystemClock.uptimeMillis() - guardStart;
+            if (!busyNow && age > 3000) guardIdle++;
+            else guardIdle = 0;
+            if (guardIdle >= 2) {
+                voice.cancel();
+                return;
+            }
+            validHandler.postDelayed(this, 1000);
+        }
+    };
+
+    /** Touche micro: un appui = ecouter un chiffre ou un ordre; un appui pendant l'action = arret immediat. */
+    private void onMic() {
+        if (voice == null) voice = new VoiceInput(this);
+        if (voice.isRunning()) {
+            voice.cancel();
+            if (ScanService.instance != null && ScanService.instance.isBusyNow()) ScanService.instance.stopAll();
+            flashStrip("\u23F9 Arr\u00EAt");
+            return;
+        }
+        if (!voice.hasPermission()) {
+            flashStrip("Micro non autoris\u00E9: ouvrez Outils > Voix hors ligne");
+            return;
+        }
+        if (VoiceStore.get(this).total() == 0) {
+            flashStrip("Rien appris: Outils > Voix hors ligne");
+            return;
+        }
+        flashStrip("\uD83C\uDFA4 J'\u00E9coute\u2026");
+        voice.once(pcm -> {
+            handleVoice(pcm);
+            return false;
+        });
+    }
+
+    private void handleVoice(short[] pcm) {
+        try {
+            if (pcm == null || pcm.length == 0) {
+                flashStrip("Rien entendu");
+                return;
+            }
+            VoiceModel m = VoiceStore.get(this);
+            java.util.List<VoiceCore.Span> spans = VoiceCore.split(pcm, 220, 90);
+            if (spans.isEmpty()) {
+                flashStrip("Rien entendu");
+                return;
+            }
+            if (spans.size() <= 4) {
+                java.util.List<VoiceCore.Span> one = VoiceCore.split(pcm, 700, 90);
+                if (!one.isEmpty()) {
+                    VoiceModel.Match cm = m.classifyCommand(
+                            VoiceCore.mfcc(pcm, one.get(0).from, one.get(one.size() - 1).to));
+                    if (cm.sure()) {
+                        runVoiceCommand(cm.label.substring(VoiceModel.CMD.length()));
+                        return;
+                    }
+                }
+            }
+            StringBuilder joined = new StringBuilder();
+            boolean sure = true;
+            for (VoiceCore.Span s : spans) {
+                VoiceModel.Match r = m.classify(VoiceCore.mfcc(pcm, s.from, s.to));
+                if (r.label.isEmpty()) {
+                    sure = false;
+                    continue;
+                }
+                joined.append(r.label).append(' ');
+                if (!r.sure()) sure = false;
+            }
+            DarijaNumbers.Result nr = DarijaNumbers.parse(joined.toString().trim());
+            if (nr != null && nr.ok() && sure && !nr.risky) {
+                for (int i = 0; i < nr.digits.length(); i++) press(String.valueOf(nr.digits.charAt(i)));
+                flashStrip("\uD83C\uDFA4 " + nr.digits);
+            } else {
+                flashStrip("Incertain: " + (nr != null && nr.ok() ? nr.digits : "?") + " \u2014 r\u00E9p\u00E9tez");
+            }
+        } catch (Throwable t) {
+            flashStrip("Erreur voix");
+        }
+    }
+
+    private void runVoiceCommand(String id) {
+        ScanService sv = ScanService.instance;
+        if (sv == null) {
+            flashStrip("Service d'accessibilit\u00E9 d\u00E9sactiv\u00E9");
+            return;
+        }
+        if (id.equals("stop")) {
+            sv.stopAll();
+            flashStrip("\u23F9 Stop");
+            return;
+        }
+        if (id.equals("local")) runAnomaly(0);
+        else if (id.equals("bloque")) runAnomaly(1);
+        else if (id.equals("inaccessible")) runAnomaly(2);
+        else if (id.equals("photo")) sv.openCameraNow();
+        else return;
+        // pendant l'action, on ecoute encore pour entendre "stop"
+        guardIdle = 0;
+        guardStart = android.os.SystemClock.uptimeMillis();
+        validHandler.postDelayed(() -> {
+            if (voice == null || voice.isRunning()) return;
+            voice.guard(pcm2 -> {
+                try {
+                    if (pcm2 != null && pcm2.length > 0) {
+                        java.util.List<VoiceCore.Span> one = VoiceCore.split(pcm2, 700, 90);
+                        if (!one.isEmpty()) {
+                            VoiceModel.Match cm = VoiceStore.get(this).classifyCommand(
+                                    VoiceCore.mfcc(pcm2, one.get(0).from, one.get(one.size() - 1).to));
+                            if (cm.sure() && cm.label.equals(VoiceModel.CMD + "stop")) {
+                                if (ScanService.instance != null) ScanService.instance.stopAll();
+                                flashStrip("\u23F9 Stop");
+                                return false;
+                            }
+                        }
+                    }
+                } catch (Throwable t) {
+                    // on continue d'ecouter
+                }
+                return true;
+            }, 60000);
+            validHandler.postDelayed(guardWatch, 1000);
+        }, 500);
+    }
+
     private void gotoAlertMeter() {
         // compteur du tableau non propose par l'application: saisie rapide de son index (sans le chercher)
         if (!dAlertNum.isEmpty()) {
@@ -972,6 +1108,8 @@ public class KeyboardService extends InputMethodService {
         mid.addView(makeKey("\u2699\nOPTIONS", C_LIGHT, C_LIGHT_SH, C_TEXT, 11,
                 () -> setInputView(buildOptions())),
                 lp(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
+        mid.addView(makeKey("\uD83C\uDFA4", C_LIGHT, C_LIGHT_SH, C_TEXT, 20, () -> onMic()),
+                lp(0, ViewGroup.LayoutParams.MATCH_PARENT, 0.6f));
         right.addView(mid, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
