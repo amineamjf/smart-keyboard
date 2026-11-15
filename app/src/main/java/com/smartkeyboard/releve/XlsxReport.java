@@ -152,7 +152,6 @@ public final class XlsxReport {
             for (int c = 0; c < nc; c++) w[c] = Math.max(w[c], len(T[i][c]) * 1.12 + 4);
         }
         for (int c = 0; c < nc; c++) w[c] = Math.min(w[c], Math.max(WMAX[c], WMIN[c]));
-        java.util.HashMap<String, Long> med = Verdict.medians(Meters.ROWS);
 
         StringBuilder sb = new StringBuilder();
         sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
@@ -199,7 +198,11 @@ public final class XlsxReport {
             boolean band = (i % 2) == 1;
             int t = band ? S_TXT_B : S_TXT;
             int nu = band ? S_NUM_B : S_NUM;
-            int vs = verdictStyle(Verdict.judge(m, med, limUp, limDown), nu);
+            int vs = nu;
+            if (!x[5].isEmpty()) {
+                long cv = Long.parseLong(x[5]);
+                vs = cv < 0 ? S_V_NEG : cv > limUp ? S_V_HIGH : cv == 0 ? S_V_ZERO : S_V_OK;
+            }
             sb.append("<row r=\"").append(r).append("\" ht=\"24\" customHeight=\"1\">");
             txt(sb, 0, r, S_CHIP, x[0]);
             txt(sb, 1, r, t, x[1]);
@@ -327,8 +330,8 @@ public final class XlsxReport {
                 .append(fill("FFEB9C")).append(fill("FFC7CE")).append(fill("E7E6E6"))
                 .append(fill("F8CBAD")).append(fill("DDEBF7")).append(fill("E4DFEC"))
                 .append(fill("DCE6F1")).append(fill("FFE0B2"))
-                .append(fill("DDF1E3")).append(fill("FFF1BF")).append(fill("F9D9D9"))
-                .append(fill("DCE9F7")).append(fill("E6EAF3")).append("</fills>");
+                .append(fill("C4EDD0")).append(fill("FFE2A6")).append(fill("FAC9C9"))
+                .append(fill("D3E4F7")).append(fill("E6EAF3")).append("</fills>");
         sb.append("<borders count=\"2\"><border><left/><right/><top/><bottom/><diagonal/></border>")
                 .append("<border>");
         for (String side : new String[]{"left", "right", "top", "bottom"}) {

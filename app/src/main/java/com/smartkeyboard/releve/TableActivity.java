@@ -12,6 +12,7 @@ import android.view.ViewGroup;
 import android.widget.BaseAdapter;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
@@ -177,9 +178,9 @@ public class TableActivity extends Activity {
     }
 
     private TextView headBtn(String s, Runnable r) {
-        TextView t = label(s, 13, 0xFFFFFFFF, true);
-        t.setPadding(dp(12), dp(8), dp(12), dp(8));
-        t.setBackground(shape(0x33FFFFFF, 18));
+        TextView t = label(s, 13, 0xFF2563EB, true);
+        t.setPadding(dp(14), dp(10), dp(14), dp(10));
+        t.setBackground(cardShape(0xFFFFFFFF, 0xFFE6EAF2, 16));
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-2, -2);
         p.leftMargin = dp(8);
         t.setLayoutParams(p);
@@ -200,8 +201,8 @@ public class TableActivity extends Activity {
             String nmk = chipFilters[k] == F_HIGH ? chipNames[k] + " >" + ScanService.maxJump : chipNames[k];
             String txt = nmk + (chipFilters[k] == F_ALL ? "" : " " + countFor(chipFilters[k]));
             chipViews[k].setText(txt);
-            chipViews[k].setTextColor(on ? 0xFFFFFFFF : 0xFF0B0C0E);
-            chipViews[k].setBackground(shape(on ? 0xFF1F5FD0 : 0xFFFFFFFF, 20));
+            chipViews[k].setTextColor(on ? 0xFFFFFFFF : 0xFF475569);
+            chipViews[k].setBackground(on ? shape(0xFF0F172A, 20) : cardShape(0xFFFFFFFF, 0xFFE6EAF2, 20));
         }
     }
 
@@ -363,71 +364,123 @@ public class TableActivity extends Activity {
         }
     }
 
-    private View rowViewInner(Meters.Row r) {
-        LinearLayout outer = new LinearLayout(this);
-        outer.setOrientation(LinearLayout.HORIZONTAL);
-        outer.setPadding(dp(8), dp(8), dp(10), dp(8));
+    // Couleurs des cartes (identiques a l'export Excel): normale / elevee / negative / arretee
+    static final int C_OK = 0xFFC4EDD0, C_OK_L = 0xFF7FCB98, C_HIGH = 0xFFFFE2A6, C_HIGH_L = 0xFFF2C265,
+            C_NEG = 0xFFFAC9C9, C_NEG_L = 0xFFEE9393, C_STOP = 0xFFD3E4F7, C_STOP_L = 0xFFA9C8EC;
 
-        // bande bleue a gauche (comme l'application d'origine)
+    private android.graphics.drawable.GradientDrawable cardShape(int fill, int line, int radiusDp) {
+        android.graphics.drawable.GradientDrawable g = shape(fill, radiusDp);
+        g.setStroke(dp(1), line);
+        return g;
+    }
+
+    private TextView plain(String text, int sp, int color, boolean bold) {
+        TextView t = label(text, sp, color, bold);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.topMargin = dp(2);
+        t.setLayoutParams(lp);
+        return t;
+    }
+
+    /** Petite cellule blanche translucide: titre + valeur (ancien index, nouvel index, consommation). */
+    private View cell(String title, String value, int valueColor) {
+        LinearLayout c = new LinearLayout(this);
+        c.setOrientation(LinearLayout.VERTICAL);
+        c.setGravity(android.view.Gravity.CENTER);
+        c.setBackground(shape(0xB3FFFFFF, 12));
+        c.setPadding(dp(4), dp(6), dp(4), dp(7));
+        c.addView(label(title, 10, 0xFF475569, false));
+        TextView v = label(value, 17, valueColor, true);
+        c.addView(v);
+        return c;
+    }
+
+    private View rowViewInner(Meters.Row r) {
         final long csv = consOf(r);
         final boolean isNeg = csv != Long.MIN_VALUE && csv < 0;
         final boolean isHigh = csv != Long.MIN_VALUE && csv >= 0 && csv > ScanService.maxJump;
+        final boolean isStop = csv == 0 && r.oldIdx.matches("\\d{1,9}") && r.newIdx.matches("\\d{1,9}");
+        int fillC = C_OK, lineC = C_OK_L;
         if (isNeg) {
-            cardBgC = 0xFFFBE7E7;
-            iconBgC = 0xFFF4C9C9;
-            iconFgC = 0xFF8E1B1B;
+            fillC = C_NEG;
+            lineC = C_NEG_L;
         } else if (isHigh) {
-            cardBgC = 0xFFFDF1DE;
-            iconBgC = 0xFFF8DDB0;
-            iconFgC = 0xFF8A5200;
-        } else {
-            cardBgC = 0xFFEAF8F0;
-            iconBgC = 0xFFCDEBDB;
-            iconFgC = 0xFF1B6B43;
+            fillC = C_HIGH;
+            lineC = C_HIGH_L;
+        } else if (isStop) {
+            fillC = C_STOP;
+            lineC = C_STOP_L;
         }
-        View bar = new View(this);
-        bar.setBackgroundColor(isNeg ? 0xFFD96A6A : isHigh ? 0xFFE8A33D : 0xFF5B8DEF);
-        LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(dp(5), ViewGroup.LayoutParams.MATCH_PARENT);
-        bl.rightMargin = dp(8);
-        outer.addView(bar, bl);
+        cardBgC = fillC;
+        iconBgC = 0xAAFFFFFF;
+        iconFgC = isNeg ? 0xFF8E1B1B : isHigh ? 0xFF8A5200 : isStop ? 0xFF1F4E8C : 0xFF1B6B43;
+
+        LinearLayout outer = new LinearLayout(this);
+        outer.setOrientation(LinearLayout.VERTICAL);
+        outer.setPadding(dp(12), dp(5), dp(12), dp(5));
 
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackground(shape(cardBgC, 10));
-        card.setPadding(dp(12), dp(10), dp(12), dp(12));
+        card.setBackground(cardShape(fillC, lineC, 20));
+        card.setPadding(dp(14), dp(12), dp(14), dp(12));
 
         boolean on = r.oldIdx.matches("\\d{1,9}"), nn = r.newIdx.matches("\\d{1,9}");
         int vd = Verdict.judge(r, medians, ScanService.maxJump, ScanService.maxDrop);
         long cons = on && nn ? Long.parseLong(r.newIdx) - Long.parseLong(r.oldIdx) : 0;
         Long md = medians.get(Meters.tourneeOf(r));
 
-        // 1) numero du compteur (sans zeros de tete)  2) contrat  3) nom  4) adresse
-        card.addView(infoLine("🔢", noZeros(r.compteur), 0xFF0B0C0E, true, 17));
+        // 1) numero du compteur + tournee (code seul)  2) contrat  3) nom  4) adresse
+        LinearLayout head1 = new LinearLayout(this);
+        head1.setOrientation(LinearLayout.HORIZONTAL);
+        head1.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        head1.addView(label("N\u00B0 " + noZeros(r.compteur), 17, 0xFF0F172A, true),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        String tr = Meters.tourneeOf(r);
+        if (tr != null && !tr.isEmpty()) {
+            TextView tc = label(tr, 11, 0xFF0F172A, true);
+            tc.setPadding(dp(9), dp(3), dp(9), dp(3));
+            tc.setBackground(shape(0xAAFFFFFF, 9));
+            head1.addView(tc);
+        }
+        int sc = r.warn.isEmpty() ? stripe(r.status) : 0xFFC77000;
+        String glyph = r.status == Meters.SENT ? "\u2713" : r.status == Meters.ERROR ? "\u2715"
+                : (sc == 0xFFC77000 ? "!" : "");
+        if (!glyph.isEmpty()) {
+            TextView badge = label(glyph, 13, 0xFFFFFFFF, true);
+            badge.setGravity(android.view.Gravity.CENTER);
+            badge.setBackground(shape(sc, 12));
+            LinearLayout.LayoutParams gp = new LinearLayout.LayoutParams(dp(24), dp(24));
+            gp.leftMargin = dp(6);
+            head1.addView(badge, gp);
+        }
+        card.addView(head1);
         String ct = Meters.contractOf(r);
-        if (!ct.isEmpty()) card.addView(infoLine("📄", ct, 0xFF1F2A24, false, 15));
+        if (!ct.isEmpty()) card.addView(plain("Contrat " + ct, 13, 0xFF334155, false));
         String nm = Meters.nameOf(r);
-        if (!nm.isEmpty()) card.addView(infoLine("👤", nm, 0xFF0B0C0E, true, 15));
+        if (!nm.isEmpty()) {
+            TextView nt0 = plain(nm, 15, 0xFF0F172A, true);
+            ((LinearLayout.LayoutParams) nt0.getLayoutParams()).topMargin = dp(8);
+            card.addView(nt0);
+        }
         String ad = Meters.addressOf(r);
-        if (!ad.isEmpty()) card.addView(infoLine("📍", ad, 0xFF2B3A32, false, 13));
-
-        // 5) anciens / nouveaux index, consommation
-        card.addView(infoLine("◀", "Ancien index : " + (r.oldIdx.isEmpty() ? "?" : r.oldIdx),
-                0xFF1F2A24, false, 15));
-        card.addView(infoLine("▶", "Nouvel index : " + (r.newIdx.isEmpty() ? "—" : r.newIdx),
-                r.newIdx.isEmpty() ? 0xFF7B8C83 : 0xFF0B7A2E, true, 15));
-        if (on && nn) {
-            int cc = (vd == Verdict.NEG || vd == Verdict.OUT) ? 0xFF8E1B1B
-                    : (vd == Verdict.HIGH || vd == Verdict.ZERO) ? 0xFF9A5600 : 0xFF17803F;
-            card.addView(infoLine("💧", "Consommation : " + cons, cc, true, 15));
-        }
+        if (!ad.isEmpty()) card.addView(plain(ad, 12, 0xFF475569, false));
         Meters.Todo tdo = Meters.TODO.get(r.key);
-        if (tdo != null && !tdo.phone.isEmpty()) {
-            card.addView(infoLine("📞", tdo.phone, 0xFF1F3D2E, false, 14));
-        }
-        if (!r.tournee.isEmpty() || !r.photos.isEmpty()) {
-            card.addView(infoLine("🗺", (r.tournee.isEmpty() ? "" : "Tournée " + r.tournee)
-                    + (r.photos.isEmpty() ? "" : "   📷 photo"), 0xFF3B5546, false, 12));
-        }
+        if (tdo != null && !tdo.phone.isEmpty()) card.addView(plain("\u260E " + tdo.phone, 12, 0xFF334155, false));
+
+        // 5) ancien / nouvel index et consommation: trois cellules
+        LinearLayout cells = new LinearLayout(this);
+        cells.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        cp.rightMargin = dp(6);
+        cells.addView(cell("Ancien index", r.oldIdx.isEmpty() ? "?" : r.oldIdx, 0xFF0F172A), cp);
+        LinearLayout.LayoutParams cp2 = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        cp2.rightMargin = dp(6);
+        cells.addView(cell("Nouvel index", r.newIdx.isEmpty() ? "\u2014" : r.newIdx, 0xFF0F172A), cp2);
+        String cv = on && nn ? (cons > 0 ? "+" + cons : cons < 0 ? "\u2212" + (-cons) : "0") : "\u2014";
+        cells.addView(cell("Consommation", cv, iconFgC), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(-1, -2);
+        cl.topMargin = dp(10);
+        card.addView(cells, cl);
 
         {
             final Meters.Row rr = r;
@@ -530,25 +583,7 @@ public class TableActivity extends Activity {
             nt.setPadding(0, dp(6), 0, 0);
             card.addView(nt);
         }
-        outer.addView(card, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-
-        // pastille d'etat en haut a droite (comme le compteur vert de l'application d'origine)
-        int sc = r.warn.isEmpty() ? stripe(r.status) : 0xFFC77000;
-        String glyph = r.status == Meters.SENT ? "✓" : r.status == Meters.ERROR ? "✕"
-                : (sc == 0xFFC77000 ? "!" : "●");
-        if (isNeg) {
-            sc = 0xFFD96A6A;
-            glyph = "\u25BC";
-        } else if (isHigh) {
-            sc = 0xFFE8A33D;
-            glyph = "\u25B2";
-        }
-        TextView badge = label(glyph, 14, 0xFFFFFFFF, true);
-        badge.setGravity(android.view.Gravity.CENTER);
-        badge.setBackground(shape(sc, 14));
-        LinearLayout.LayoutParams gp = new LinearLayout.LayoutParams(dp(28), dp(28));
-        gp.leftMargin = dp(6);
-        outer.addView(badge, gp);
+        outer.addView(card, new LinearLayout.LayoutParams(-1, -2));
         return outer;
     }
 
@@ -969,29 +1004,100 @@ public class TableActivity extends Activity {
         return t;
     }
 
+    private static int iconType(String emoji, String title) {
+        switch (emoji) {
+            case "\uD83D\uDCCB": return IconView.DOWN;
+            case "\uD83D\uDCC2": return IconView.FOLDER;
+            case "\uD83D\uDDD2": return IconView.TEXT;
+            case "\u2211": return IconView.SIGMA;
+            case "\u2699": return IconView.GEAR;
+            case "\uD83D\uDCCA": return IconView.CHART;
+            case "\uD83D\uDCE4": return title.startsWith("Partager") ? IconView.SHARE : IconView.FILE;
+            case "\uD83D\uDCDE": return IconView.PHONE;
+            case "\u2709": return IconView.MAIL;
+            case "\uD83D\uDCC4": return IconView.FILE;
+            case "\uD83D\uDCBE": return IconView.SAVE;
+            case "\u267B": return IconView.RESTORE;
+            case "\uD83D\uDCE8": return IconView.SHARE;
+            default: return IconView.FILE;
+        }
+    }
+
+    /** Bouton d'outil: icone lineaire dans une pastille + titre + precision (regroupe 2 par ligne dans showTools). */
     private View toolRow(final android.app.Dialog d, String icon, String title, String sub, final Runnable r) {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(4), dp(8), dp(4), dp(8));
-        TextView ic = label(icon, 18, 0xFF0B0C0E, false);
-        ic.setGravity(android.view.Gravity.CENTER);
-        ic.setBackground(shape(0xFFE8EFFC, 12));
-        row.addView(ic, new LinearLayout.LayoutParams(dp(40), dp(40)));
-        LinearLayout mid = new LinearLayout(this);
-        mid.setOrientation(LinearLayout.VERTICAL);
-        mid.setPadding(dp(12), 0, 0, 0);
-        mid.addView(label(title, 15, 0xFF0B0C0E, true));
-        mid.addView(label(sub, 12, 0xFF5B6573, false));
-        row.addView(mid, new LinearLayout.LayoutParams(0, -2, 1f));
-        android.util.TypedValue ta = new android.util.TypedValue();
-        getTheme().resolveAttribute(android.R.attr.selectableItemBackground, ta, true);
-        row.setBackgroundResource(ta.resourceId);
-        row.setOnClickListener(v -> {
+        LinearLayout t = new LinearLayout(this);
+        t.setTag("tile");
+        t.setOrientation(LinearLayout.VERTICAL);
+        t.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+        t.setPadding(dp(8), dp(12), dp(8), dp(10));
+        t.setBackground(cardShape(0xFFF8FAFD, 0xFFE6EAF2, 18));
+        FrameLayout chip = new FrameLayout(this);
+        chip.setBackground(shape(0xFFEAF0FF, 14));
+        chip.addView(new IconView(this, iconType(icon, title), 0xFF2563EB),
+                new FrameLayout.LayoutParams(dp(26), dp(26), android.view.Gravity.CENTER));
+        t.addView(chip, new LinearLayout.LayoutParams(dp(46), dp(46)));
+        TextView tt = label(title, 13, 0xFF0F172A, true);
+        tt.setGravity(android.view.Gravity.CENTER);
+        tt.setMaxLines(3);
+        LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(-1, -2);
+        tp.topMargin = dp(8);
+        t.addView(tt, tp);
+        TextView st = label(sub, 10, 0xFF64748B, false);
+        st.setGravity(android.view.Gravity.CENTER);
+        st.setMaxLines(2);
+        st.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        t.addView(st, new LinearLayout.LayoutParams(-1, -2));
+        t.setOnClickListener(v -> {
             d.dismiss();
             r.run();
         });
-        return row;
+        return t;
+    }
+
+    /** Regroupe les boutons d'outil consecutifs en lignes de deux. */
+    private LinearLayout groupTools(LinearLayout box) {
+        LinearLayout out = new LinearLayout(this);
+        out.setOrientation(LinearLayout.VERTICAL);
+        out.setPadding(dp(16), dp(10), dp(16), dp(20));
+        float rad = dp(28);
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setColor(0xFFFFFFFF);
+        bg.setCornerRadii(new float[]{rad, rad, rad, rad, 0, 0, 0, 0});
+        out.setBackground(bg);
+        View grip = new View(this);
+        grip.setBackground(shape(0xFFE2E8F0, 3));
+        LinearLayout.LayoutParams gl = new LinearLayout.LayoutParams(dp(42), dp(5));
+        gl.gravity = android.view.Gravity.CENTER_HORIZONTAL;
+        out.addView(grip, gl);
+        out.addView(label("Outils", 20, 0xFF0F172A, true));
+        ArrayList<View> run = new ArrayList<>();
+        ArrayList<View> kids = new ArrayList<>();
+        for (int i = 0; i < box.getChildCount(); i++) kids.add(box.getChildAt(i));
+        box.removeAllViews();
+        kids.add(null);
+        for (View v : kids) {
+            if (v != null && "tile".equals(v.getTag())) {
+                run.add(v);
+                continue;
+            }
+            for (int i = 0; i < run.size(); i += 2) {
+                LinearLayout row = new LinearLayout(this);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                LinearLayout.LayoutParams a1 = new LinearLayout.LayoutParams(0, -1, 1f);
+                a1.rightMargin = dp(5);
+                a1.bottomMargin = dp(8);
+                row.addView(run.get(i), a1);
+                LinearLayout.LayoutParams a2 = new LinearLayout.LayoutParams(0, -1, 1f);
+                a2.leftMargin = dp(5);
+                a2.bottomMargin = dp(8);
+                if (i + 1 < run.size()) row.addView(run.get(i + 1), a2);
+                else row.addView(new View(this), a2);
+                out.addView(row, new LinearLayout.LayoutParams(-1, -2));
+            }
+            run.clear();
+            if (v != null) out.addView(v);
+        }
+        return out;
     }
 
     /** Feuille d'outils: importer le tableau, importer les lectures, exporter. */
@@ -1043,7 +1149,7 @@ public class TableActivity extends Activity {
         box.addView(toolRow(d, "\uD83D\uDCE4", "Partager le rapport Excel",
                 "Gmail, Drive, WhatsApp...", this::shareReport));
         android.widget.ScrollView sv = new android.widget.ScrollView(this);
-        sv.addView(box);
+        sv.addView(groupTools(box));
         d.setContentView(sv);
         android.view.Window w = d.getWindow();
         if (w != null) {
@@ -1064,18 +1170,18 @@ public class TableActivity extends Activity {
         }
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(0xFFF3F5F8);
+        root.setBackgroundColor(0xFFF4F6FB);
 
         // en-tete
         LinearLayout top = new LinearLayout(this);
         top.setOrientation(LinearLayout.HORIZONTAL);
         top.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        top.setBackgroundColor(0xFF1F5FD0);
-        top.setPadding(dp(20), dp(30), dp(14), dp(16));
+        top.setBackgroundColor(0xFFF4F6FB);
+        top.setPadding(dp(18), dp(30), dp(12), dp(8));
         LinearLayout tt = new LinearLayout(this);
         tt.setOrientation(LinearLayout.VERTICAL);
-        tt.addView(label("Tableau", 22, 0xFFFFFFFF, true));
-        head = label("", 13, 0xCCFFFFFF, false);
+        tt.addView(label("Tableau", 28, 0xFF0F172A, true));
+        head = label("", 13, 0xFF64748B, false);
         tt.addView(head);
         top.addView(tt, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         top.addView(headBtn("Tourn\u00E9es", this::pickTournees));
@@ -1094,7 +1200,7 @@ public class TableActivity extends Activity {
         chipViews = new TextView[chipNames.length];
         for (int k = 0; k < chipNames.length; k++) {
             final int fk = chipFilters[k];
-            TextView c = label(chipNames[k], 13, 0xFF0B0C0E, false);
+            TextView c = label(chipNames[k], 13, 0xFF475569, true);
             c.setPadding(dp(14), dp(8), dp(14), dp(8));
             LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-2, -2);
             cp.rightMargin = dp(8);
@@ -1119,8 +1225,7 @@ public class TableActivity extends Activity {
         LinearLayout sbox = new LinearLayout(this);
         sbox.setOrientation(LinearLayout.HORIZONTAL);
         sbox.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        sbox.setBackground(shape(0xFFFFFFFF, 14));
-        sbox.setElevation(dp(1));
+        sbox.setBackground(cardShape(0xFFFFFFFF, 0xFFE6EAF2, 16));
         sbox.setPadding(dp(14), 0, dp(10), 0);
         sbox.addView(label("\uD83D\uDD0D", 16, 0xFF5B6573, false));
         final EditText search = new EditText(this);
@@ -1206,38 +1311,124 @@ public class TableActivity extends Activity {
                     .show();
             return;
         }
-        new AlertDialog.Builder(this)
-                .setTitle(r.compteur)
-                .setMessage("Nouvel index (la ligne sera remise a 'Non vu')")
-                .setView(et)
-                .setPositiveButton("Enregistrer", (d, w) -> {
-                    r.newIdx = Meters.cleanNumber(et.getText().toString());
-                    r.status = Meters.NEW;
-                    r.note = "";
-                    ScanService.saveTable(this);
-                    reload();
-                })
-                .setNeutralButton("Hors application : \u00E0 transmettre", (d, w) -> {
-                    String v = Meters.cleanNumber(et.getText().toString());
-                    if (v.isEmpty()) {
-                        Toast.makeText(this, "Saisissez d'abord le nouvel index", Toast.LENGTH_LONG).show();
-                        return;
-                    }
-                    r.newIdx = v;
-                    r.status = Meters.NODATA;
-                    r.note = Meters.OFFAPP + " " + new java.text.SimpleDateFormat("dd/MM/yyyy HH:mm",
-                            java.util.Locale.FRANCE).format(new java.util.Date());
-                    ScanService.saveTable(this);
-                    reload();
-                    Toast.makeText(this, "Ajout\u00E9 \u00E0 la liste \u00E0 transmettre", Toast.LENGTH_LONG).show();
-                })
-                .setNegativeButton("Marquer envoy\u00E9", (d, w) -> {
-                    r.status = Meters.SENT;
-                    r.note = "marque a la main";
-                    ScanService.saveTable(this);
-                    reload();
-                })
-                .show();
+        showEditSheet(r, et);
+    }
+
+    /** Panneau coulissant: grande zone de saisie du nouvel index + actions (memes actions qu'avant). */
+    private android.app.Dialog sheetDialog(LinearLayout content) {
+        final android.app.Dialog d = new android.app.Dialog(this);
+        d.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
+        content.setBackground(new android.graphics.drawable.GradientDrawable() {
+            {
+                setColor(0xFFFFFFFF);
+                float r = dp(28);
+                setCornerRadii(new float[]{r, r, r, r, 0, 0, 0, 0});
+            }
+        });
+        d.setContentView(content);
+        android.view.Window w = d.getWindow();
+        if (w != null) {
+            w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(0));
+            w.setGravity(android.view.Gravity.BOTTOM);
+            w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            w.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+                    | android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE);
+        }
+        return d;
+    }
+
+    private TextView sheetBtn(String text, int bg, int fg, boolean stroke) {
+        TextView b = label(text, 15, fg, true);
+        b.setGravity(android.view.Gravity.CENTER);
+        b.setBackground(stroke ? cardShape(bg, 0xFFE6EAF2, 16) : shape(bg, 16));
+        b.setClickable(true);
+        return b;
+    }
+
+    private void showEditSheet(final Meters.Row r, final EditText et) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(20), dp(10), dp(20), dp(20));
+        View grip = new View(this);
+        grip.setBackground(shape(0xFFE2E8F0, 3));
+        LinearLayout.LayoutParams gl = new LinearLayout.LayoutParams(dp(42), dp(5));
+        gl.gravity = android.view.Gravity.CENTER_HORIZONTAL;
+        gl.bottomMargin = dp(14);
+        box.addView(grip, gl);
+        box.addView(label("N\u00B0 " + noZeros(r.compteur), 18, 0xFF0F172A, true));
+        String sub = (Meters.contractOf(r).isEmpty() ? "" : "Contrat " + Meters.contractOf(r))
+                + (Meters.nameOf(r).isEmpty() ? "" : "  \u00B7  " + Meters.nameOf(r));
+        if (!sub.isEmpty()) box.addView(label(sub, 13, 0xFF64748B, false));
+        box.addView(label("NOUVEL INDEX", 11, 0xFF64748B, true),
+                new LinearLayout.LayoutParams(-2, -2));
+        et.setTextSize(32);
+        et.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        et.setGravity(android.view.Gravity.CENTER);
+        et.setBackground(cardShape(0xFFFFFFFF, 0xFF2563EB, 18));
+        et.setSelection(et.getText().length());
+        LinearLayout.LayoutParams el = new LinearLayout.LayoutParams(-1, dp(72));
+        el.topMargin = dp(8);
+        el.bottomMargin = dp(6);
+        box.addView(et, el);
+        String ctx = "Ancien index " + (r.oldIdx.isEmpty() ? "?" : r.oldIdx);
+        TextView cx = label(ctx, 13, 0xFF64748B, false);
+        cx.setGravity(android.view.Gravity.CENTER);
+        box.addView(cx, new LinearLayout.LayoutParams(-1, -2));
+        final android.app.Dialog d = sheetDialog(box);
+
+        TextView save = sheetBtn("Enregistrer", 0xFF2563EB, 0xFFFFFFFF, false);
+        save.setOnClickListener(v -> {
+            r.newIdx = Meters.cleanNumber(et.getText().toString());
+            r.status = Meters.NEW;
+            r.note = "";
+            ScanService.saveTable(this);
+            reload();
+            d.dismiss();
+        });
+        LinearLayout.LayoutParams sl = new LinearLayout.LayoutParams(-1, dp(50));
+        sl.topMargin = dp(12);
+        box.addView(save, sl);
+
+        LinearLayout two = new LinearLayout(this);
+        two.setOrientation(LinearLayout.HORIZONTAL);
+        TextView sent = sheetBtn("Marquer envoy\u00E9", 0xFFEAF0FF, 0xFF2563EB, false);
+        sent.setOnClickListener(v -> {
+            r.status = Meters.SENT;
+            r.note = "marque a la main";
+            ScanService.saveTable(this);
+            reload();
+            d.dismiss();
+        });
+        TextView off = sheetBtn("Hors application", 0xFFEAF0FF, 0xFF2563EB, false);
+        off.setOnClickListener(v -> {
+            String val = Meters.cleanNumber(et.getText().toString());
+            if (val.isEmpty()) {
+                Toast.makeText(this, "Saisissez d'abord le nouvel index", Toast.LENGTH_LONG).show();
+                return;
+            }
+            r.newIdx = val;
+            r.status = Meters.NODATA;
+            r.note = Meters.OFFAPP + " " + new java.text.SimpleDateFormat("dd/MM/yyyy HH:mm",
+                    java.util.Locale.FRANCE).format(new java.util.Date());
+            ScanService.saveTable(this);
+            reload();
+            Toast.makeText(this, "Ajout\u00E9 \u00E0 la liste \u00E0 transmettre", Toast.LENGTH_LONG).show();
+            d.dismiss();
+        });
+        LinearLayout.LayoutParams t1 = new LinearLayout.LayoutParams(0, dp(48), 1f);
+        t1.rightMargin = dp(8);
+        two.addView(sent, t1);
+        two.addView(off, new LinearLayout.LayoutParams(0, dp(48), 1f));
+        LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(-1, -2);
+        tl.topMargin = dp(8);
+        box.addView(two, tl);
+
+        TextView cancel = sheetBtn("Annuler", 0xFFFFFFFF, 0xFF0F172A, true);
+        cancel.setOnClickListener(v -> d.dismiss());
+        LinearLayout.LayoutParams cl2 = new LinearLayout.LayoutParams(-1, dp(46));
+        cl2.topMargin = dp(8);
+        box.addView(cancel, cl2);
+        d.show();
     }
 
     @Override

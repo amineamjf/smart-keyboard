@@ -38,10 +38,11 @@ public class MainActivity extends Activity {
 
     // ---------- interface ----------
     private static final int BLUE = 0xFF1F5FD0, GREEN = 0xFF17803F, RED = 0xFFC62828, AMBER = 0xFFC77000,
-            INK = 0xFF0B0C0E, GRAY = 0xFF5B6573, PALE = 0xFFE8EFFC, CHIP = 0xFFEEF0F3, PAGE = 0xFFF3F5F8;
+            INK = 0xFF0B0C0E, GRAY = 0xFF5B6573, PALE = 0xFFEAF0FF, CHIP = 0xFFEEF0F3, PAGE = 0xFFF4F6FB;
     private static final int REQ_LOGDIR = 12;
 
-    private TextView chipService, chipMode, chipRows;
+    private TextView chipService, chipMode, chipRows, heroNum;
+    private android.widget.ProgressBar heroBar;
     private TextView accVal, kbVal, tabVal, autoLine, logSub, logVal;
     private TextView modeVal, photoVal, jumpVal, dropVal;
     private LinearLayout advBox;
@@ -94,8 +95,9 @@ public class MainActivity extends Activity {
         LinearLayout c = new LinearLayout(this);
         c.setOrientation(LinearLayout.VERTICAL);
         c.setPadding(dp(16), dp(16), dp(16), dp(10));
-        c.setBackground(shape(0xFFFFFFFF, 18));
-        c.setElevation(dp(2));
+        android.graphics.drawable.GradientDrawable cg = shape(0xFFFFFFFF, 22);
+        cg.setStroke(dp(1), 0xFFE6EAF2);
+        c.setBackground(cg);
         TextView h = tv(title.toUpperCase(), 12, GRAY, true);
         h.setLetterSpacing(0.08f);
         h.setPadding(0, 0, 0, dp(6));
@@ -108,10 +110,11 @@ public class MainActivity extends Activity {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(android.view.Gravity.CENTER_VERTICAL);
         row.setPadding(0, dp(8), 0, dp(8));
-        TextView ic = tv(icon, 18, INK, false);
-        ic.setGravity(android.view.Gravity.CENTER);
-        ic.setBackground(shape(PALE, 12));
-        row.addView(ic, new LinearLayout.LayoutParams(dp(40), dp(40)));
+        android.widget.FrameLayout ic = new android.widget.FrameLayout(this);
+        ic.setBackground(shape(PALE, 14));
+        ic.addView(new IconView(this, iconFor(icon), BLUE),
+                new android.widget.FrameLayout.LayoutParams(dp(22), dp(22), android.view.Gravity.CENTER));
+        row.addView(ic, new LinearLayout.LayoutParams(dp(42), dp(42)));
         LinearLayout mid = new LinearLayout(this);
         mid.setOrientation(LinearLayout.VERTICAL);
         mid.setPadding(dp(12), 0, dp(8), 0);
@@ -126,6 +129,46 @@ public class MainActivity extends Activity {
             row.setOnClickListener(v -> r.run());
         }
         return row;
+    }
+
+    private static int iconFor(String e) {
+        switch (e) {
+            case "\u267F": return IconView.GEAR;
+            case "\u2328": return IconView.KB;
+            case "\uD83D\uDCCB": return IconView.TABLE;
+            case "\u26A1": return IconView.BOLT;
+            case "\uD83D\uDCC2": return IconView.FOLDER;
+            case "\u2197": return IconView.UP;
+            case "\u2198": return IconView.DN;
+            case "\uD83D\uDCF7": return IconView.CAMERA;
+            default: return IconView.GEAR;
+        }
+    }
+
+    /** Bouton d'action rapide: icone lineaire dans une pastille (la premiere est pleine couleur). */
+    private View tile(int icon, String label, boolean primary, Runnable r) {
+        LinearLayout t = new LinearLayout(this);
+        t.setOrientation(LinearLayout.VERTICAL);
+        t.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+        t.setPadding(dp(4), dp(14), dp(4), dp(12));
+        android.graphics.drawable.GradientDrawable tg = shape(0xFFFFFFFF, 20);
+        tg.setStroke(dp(1), 0xFFE6EAF2);
+        t.setBackground(tg);
+        android.widget.FrameLayout chip = new android.widget.FrameLayout(this);
+        android.graphics.drawable.GradientDrawable cg = new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
+                primary ? new int[]{0xFF2563EB, 0xFF7C3AED} : new int[]{PALE, PALE});
+        cg.setCornerRadius(dp(15));
+        chip.setBackground(cg);
+        chip.addView(new IconView(this, icon, primary ? 0xFFFFFFFF : BLUE),
+                new android.widget.FrameLayout.LayoutParams(dp(26), dp(26), android.view.Gravity.CENTER));
+        t.addView(chip, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        TextView l = tv(label, 12, INK, true);
+        l.setGravity(android.view.Gravity.CENTER);
+        l.setPadding(0, dp(8), 0, 0);
+        t.addView(l, new LinearLayout.LayoutParams(-2, -2));
+        t.setOnClickListener(v -> r.run());
+        return t;
     }
 
     private TextView subText(String s) {
@@ -158,13 +201,27 @@ public class MainActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(PAGE);
 
-        // en-tete
+        // en-tete: carte de progression en degrade
         LinearLayout top = new LinearLayout(this);
         top.setOrientation(LinearLayout.VERTICAL);
-        top.setBackgroundColor(BLUE);
-        top.setPadding(dp(20), dp(34), dp(20), dp(18));
-        top.addView(tv("Relev\u00E9 Clavier", 22, 0xFFFFFFFF, true));
-        top.addView(tv(VERSION, 13, 0xCCFFFFFF, false));
+        top.setBackground(new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
+                new int[]{0xFF2563EB, 0xFF7C3AED}) {
+            {
+                setCornerRadius(dp(26));
+            }
+        });
+        top.setPadding(dp(20), dp(20), dp(20), dp(18));
+        top.addView(tv("Relev\u00E9 Clavier", 24, 0xFFFFFFFF, true));
+        top.addView(tv(VERSION, 12, 0xCCFFFFFF, false));
+        heroNum = tv("", 30, 0xFFFFFFFF, true);
+        heroNum.setPadding(0, dp(10), 0, dp(6));
+        top.addView(heroNum);
+        heroBar = new android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        heroBar.setMax(1000);
+        heroBar.setProgressTintList(android.content.res.ColorStateList.valueOf(0xFFFFFFFF));
+        heroBar.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(0x55FFFFFF));
+        top.addView(heroBar, new LinearLayout.LayoutParams(-1, dp(8)));
         LinearLayout chips = new LinearLayout(this);
         chips.setOrientation(LinearLayout.HORIZONTAL);
         chips.setPadding(0, dp(12), 0, 0);
@@ -175,7 +232,29 @@ public class MainActivity extends Activity {
         chips.addView(chipMode);
         chips.addView(chipRows);
         top.addView(chips);
-        root.addView(top);
+        LinearLayout.LayoutParams topLp = lp(-1, -2, 0);
+        topLp.setMargins(dp(14), dp(34), dp(14), 0);
+        root.addView(top, topLp);
+
+        // actions rapides
+        LinearLayout quick = new LinearLayout(this);
+        quick.setOrientation(LinearLayout.HORIZONTAL);
+        View[] qt = {
+                tile(IconView.TABLE, "Tableau", true, () -> startActivity(new Intent(this, TableActivity.class))),
+                tile(IconView.DOWN, "Importer", false, this::pickFile),
+                tile(IconView.PLAY, "Lancer", false, () -> needService(() -> {
+                    ScanService.instance.startAuto();
+                    refresh();
+                })),
+                tile(IconView.TEXT, "Journal", false, () -> LogAuto.run(this, true))};
+        for (int i = 0; i < qt.length; i++) {
+            LinearLayout.LayoutParams q = new LinearLayout.LayoutParams(0, -2, 1f);
+            if (i > 0) q.leftMargin = dp(8);
+            quick.addView(qt[i], q);
+        }
+        LinearLayout.LayoutParams qLp = lp(-1, -2, 12);
+        qLp.setMargins(dp(14), dp(12), dp(14), 0);
+        root.addView(quick, qLp);
 
         // demarrage
         LinearLayout c1 = card("D\u00E9marrage");
@@ -432,6 +511,9 @@ public class MainActivity extends Activity {
         chipService.setText(svc ? "\u25CF Accessibilit\u00E9 active" : "\u25CB Accessibilit\u00E9 inactive");
         chipMode.setText(live ? "\u25CF Mode r\u00E9el" : "Simulation");
         chipRows.setText(Meters.ROWS.size() + " compteurs");
+        int tot = Meters.ROWS.size(), sentN = Meters.count(Meters.SENT);
+        heroNum.setText(sentN + " / " + tot + " envoy\u00E9s");
+        heroBar.setProgress(tot == 0 ? 0 : (int) (1000L * sentN / tot));
         accVal.setText(svc ? "\u2713 Actif" : "\u00C0 activer");
         accVal.setTextColor(svc ? GREEN : AMBER);
         String defIme = Settings.Secure.getString(getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD);
