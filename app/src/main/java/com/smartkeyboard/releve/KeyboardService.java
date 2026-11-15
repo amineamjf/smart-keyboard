@@ -763,6 +763,7 @@ public class KeyboardService extends InputMethodService {
                 flashStrip("Rien entendu");
                 return;
             }
+            String hint = "";
             if (spans.size() <= 4) {
                 java.util.List<VoiceCore.Span> one = VoiceCore.split(pcm, 700, 90);
                 if (!one.isEmpty()) {
@@ -771,6 +772,10 @@ public class KeyboardService extends InputMethodService {
                     if (cm.sure()) {
                         runVoiceCommand(cm.label.substring(VoiceModel.CMD.length()));
                         return;
+                    }
+                    if (!cm.label.isEmpty()) {
+                        hint = cm.label.substring(VoiceModel.CMD.length())
+                                + (cm.unknownGate ? " (1 seul exemple)" : " " + Math.round(cm.score() * 100) / 100.0);
                     }
                 }
             }
@@ -790,7 +795,8 @@ public class KeyboardService extends InputMethodService {
                 for (int i = 0; i < nr.digits.length(); i++) press(String.valueOf(nr.digits.charAt(i)));
                 flashStrip("\uD83C\uDFA4 " + nr.digits);
             } else {
-                flashStrip("Incertain: " + (nr != null && nr.ok() ? nr.digits : "?") + " \u2014 r\u00E9p\u00E9tez");
+                flashStrip("Incertain: " + (nr != null && nr.ok() ? nr.digits : "?")
+                        + (hint.isEmpty() ? "" : " | ordre? " + hint) + " \u2014 r\u00E9p\u00E9tez");
             }
         } catch (Throwable t) {
             flashStrip("Erreur voix");

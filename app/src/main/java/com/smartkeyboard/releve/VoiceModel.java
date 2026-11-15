@@ -8,6 +8,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,6 +22,16 @@ public final class VoiceModel {
         public double dist = Double.MAX_VALUE;
         public String second = "";
         public double secondDist = Double.MAX_VALUE;
+        /** Distance maximale acceptable pour ce mot/ordre (variation normale de ses propres exemples). */
+        public double gate = Double.MAX_VALUE;
+        /** Vrai pour un ordre dont on ne connait pas encore la variation (moins de 2 exemples). */
+        public boolean unknownGate = false;
+
+        /** Distance rapportee a la limite acceptable: <= 1 = dans la variation normale. */
+        public double score() {
+            if (gate <= 0 || gate == Double.MAX_VALUE || dist == Double.MAX_VALUE) return 0;
+            return dist / gate;
+        }
 
         /** Rapport entre le 2e et le 1er: plus il est grand, plus le choix est net. */
         public double ratio() {
@@ -29,7 +40,7 @@ public final class VoiceModel {
         }
 
         public boolean sure() {
-            return !label.isEmpty() && ratio() >= 1.12;
+            return !label.isEmpty() && !unknownGate && ratio() >= 1.12 && dist <= gate;
         }
     }
 
@@ -38,6 +49,48 @@ public final class VoiceModel {
     public static final String CMD = "cmd:";
 
     private final LinkedHashMap<String, List<float[][]>> words = new LinkedHashMap<>();
+    private final HashMap<String, Double> intra = new HashMap<>();
+
+    /** Distance moyenne entre les exemples d'un meme mot (0 si moins de 2 exemples). */
+    private double intraMean(String label) {
+        Double c = intra.get(label);
+        if (c != null) return c;
+        List<float[][]> l = words.get(label);
+        double sum = 0;
+        int n = 0;
+        if (l != null) {
+            int k = Math.min(l.size(), 8);
+            for (int i = 0; i < k; i++) {
+                for (int j = i + 1; j < k; j++) {
+                    double d = VoiceCore.dtw(l.get(i), l.get(j));
+                    if (d != Double.MAX_VALUE) {
+                        sum += d;
+                        n++;
+                    }
+                }
+            }
+        }
+        double v = n == 0 ? 0 : sum / n;
+        intra.put(label, v);
+        return v;
+    }
+
+    /** Limite acceptable pour un mot: 1,5 fois sa variation; sinon la moyenne generale du meme genre (mot/ordre). */
+    private double gateFor(String label, boolean cmd) {
+        double m = intraMean(label);
+        if (m > 0) return 1.5 * m;
+        double sum = 0;
+        int n = 0;
+        for (String k : words.keySet()) {
+            if (k.startsWith(CMD) != cmd) continue;
+            double x = intraMean(k);
+            if (x > 0) {
+                sum += x;
+                n++;
+            }
+        }
+        return n == 0 ? Double.MAX_VALUE : 1.5 * sum / n;
+    }
 
     public synchronized void add(String label, float[][] feat) {
         if (label == null || label.isEmpty() || feat == null || feat.length < 8) return;
@@ -47,6 +100,7 @@ public final class VoiceModel {
             words.put(label, l);
         }
         l.add(feat);
+        intra.remove(label);
         while (l.size() > MAX_PER_LABEL) l.remove(0); // on garde les plus recents
     }
 
@@ -69,10 +123,12 @@ public final class VoiceModel {
 
     public synchronized void remove(String label) {
         words.remove(label);
+        intra.remove(label);
     }
 
     public synchronized void clear() {
         words.clear();
+        intra.clear();
     }
 
     /** Compare un mot a tous les modeles: meilleure distance par mot appris. */
@@ -88,26 +144,7 @@ public final class VoiceModel {
         Match m = classify(feat, null, -1, true);
         if (m.label.isEmpty()) return m;
         List<float[][]> l = words.get(m.label);
-        if (l == null || l.size() < 2) {
-            m.secondDist = m.dist; // un seul exemple: jamais "sur"
-            return m;
-        }
-        double sum = 0;
-        int n = 0;
-        for (int i = 0; i < l.size(); i++) {
-            for (int j = i + 1; j < l.size(); j++) {
-                double d = VoiceCore.dtw(l.get(i), l.get(j));
-                if (d != Double.MAX_VALUE) {
-                    sum += d;
-                    n++;
-                }
-            }
-        }
-        double gate = n == 0 ? 0 : 1.4 * sum / n;
-        if (m.dist > gate) {
-            m.secondDist = m.dist; // trop loin des exemples: rejete
-            m.second = m.label;
-        }
+        m.unknownGate = l == null || l.size() < 2; // un seul exemple: jamais "sur"
         return m;
     }
 
@@ -133,6 +170,7 @@ public final class VoiceModel {
                 m.secondDist = best;
             }
         }
+        if (!m.label.isEmpty()) m.gate = gateFor(m.label, cmd);
         return m;
     }
 

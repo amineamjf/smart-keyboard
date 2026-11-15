@@ -447,6 +447,19 @@ public class VoiceTrainActivity extends Activity {
                 }
             }
         }
+        String cmdInfo = "";
+        if (lastSpans.size() <= 4) {
+            List<VoiceCore.Span> one2 = VoiceCore.split(lastPcm, 700, 90);
+            if (!one2.isEmpty()) {
+                VoiceModel.Match c2 = m.classifyCommand(
+                        VoiceCore.mfcc(lastPcm, one2.get(0).from, one2.get(one2.size() - 1).to));
+                if (!c2.label.isEmpty()) {
+                    cmdInfo = "\n\nOrdre le plus proche : " + c2.label.substring(VoiceModel.CMD.length())
+                            + (c2.unknownGate ? " (un seul enregistrement : refaites-le 3 fois)"
+                            : " \u2014 score " + Math.round(c2.score() * 100) / 100.0 + " (doit \u00E9tre \u2264 1)");
+                }
+            }
+        }
         StringBuilder sb = new StringBuilder();
         StringBuilder joined = new StringBuilder();
         boolean allSure = true;
@@ -475,6 +488,7 @@ public class VoiceTrainActivity extends Activity {
         } catch (Throwable t) {
             out.append("Chiffres : —");
         }
+        out.append(cmdInfo);
         result.setText(out.toString());
         status.setText(allSure
                 ? "Reconnu. Si un mot est faux, corrigez le texte en haut puis appuyez sur « Apprendre ceci »."
