@@ -744,23 +744,25 @@ public class KeyboardService extends InputMethodService {
             flashStrip("Rien appris: Outils > Voix hors ligne");
             return;
         }
-        flashStrip("\uD83C\uDFA4 J'\u00E9coute\u2026");
+        flashStrip("\u2026");
         voice.once(pcm -> {
             flashStrip("\u2026");
             new Thread(() -> handleVoice(pcm)).start();
             return false;
-        });
+        }, () -> flashStrip("\uD83C\uDFA4 PARLEZ"));
     }
 
     /** Calcul lourd sur un thread; toute action sur l'ecran repasse par le thread principal. */
     private void handleVoice(short[] pcm) {
         try {
             if (pcm == null || pcm.length == 0) {
-                showHandler.post(() -> flashStrip("Rien entendu"));
+                showHandler.post(() -> flashStrip("Rien entendu (parlez apr\u00E8s PARLEZ)"));
                 return;
             }
             VoiceModel m = VoiceStore.get(this);
+            saveDebugWav(pcm);
             java.util.List<VoiceCore.Span> base = VoiceCore.split(pcm, 220, 90);
+            diag = String.format(java.util.Locale.US, " [%.1fs, %d seg]", pcm.length / 16000.0, base.size());
             if (base.isEmpty()) {
                 showHandler.post(() -> flashStrip("Rien entendu"));
                 return;
@@ -783,7 +785,7 @@ public class KeyboardService extends InputMethodService {
                     pendFeat = feat;
                     pendTime = System.currentTimeMillis();
                     for (int i = 0; i < digits.length(); i++) press(String.valueOf(digits.charAt(i)));
-                    flashStrip("\uD83C\uDFA4 " + digits);
+                    flashStrip("\uD83C\uDFA4 " + digits + diag);
                 });
                 return;
             }
@@ -843,12 +845,43 @@ public class KeyboardService extends InputMethodService {
                     flashStrip("\uD83C\uDFA4 " + digits);
                 } else {
                     flashStrip("Incertain: " + (digits != null ? digits : "?")
-                            + (h.isEmpty() ? "" : " | ordre? " + h));
+                            + (h.isEmpty() ? "" : " | ordre? " + h) + diag);
                     showPickPanel(digits, near, feat);
                 }
             });
         } catch (Throwable t) {
             showHandler.post(() -> flashStrip("Erreur voix"));
+        }
+    }
+
+    private volatile String diag = "";
+    private static int dbgCount = 0;
+
+    /** Garde les 8 dernieres captures du clavier (WAV) pour pouvoir verifier ce que le micro a vraiment entendu. */
+    private void saveDebugWav(short[] pcm) {
+        try {
+            java.io.File dir = getExternalFilesDir("voice_dbg");
+            if (dir == null) dir = new java.io.File(getFilesDir(), "voice_dbg");
+            dir.mkdirs();
+            java.io.File f = new java.io.File(dir, "capture_" + (dbgCount++ % 8) + ".wav");
+            java.io.DataOutputStream o = new java.io.DataOutputStream(
+                    new java.io.BufferedOutputStream(new java.io.FileOutputStream(f)));
+            int len = pcm.length * 2;
+            o.writeBytes("RIFF");
+            o.writeInt(Integer.reverseBytes(36 + len));
+            o.writeBytes("WAVEfmt ");
+            o.writeInt(Integer.reverseBytes(16));
+            o.writeShort(Short.reverseBytes((short) 1));
+            o.writeShort(Short.reverseBytes((short) 1));
+            o.writeInt(Integer.reverseBytes(16000));
+            o.writeInt(Integer.reverseBytes(32000));
+            o.writeShort(Short.reverseBytes((short) 2));
+            o.writeShort(Short.reverseBytes((short) 16));
+            o.writeBytes("data");
+            o.writeInt(Integer.reverseBytes(len));
+            for (short v : pcm) o.writeShort(Short.reverseBytes(v));
+            o.close();
+        } catch (Throwable ignored) {
         }
     }
 
