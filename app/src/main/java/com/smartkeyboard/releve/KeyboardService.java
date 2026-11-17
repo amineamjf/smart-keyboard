@@ -740,6 +740,20 @@ public class KeyboardService extends InputMethodService {
             flashStrip("Micro non autoris\u00E9: ouvrez Outils > Voix hors ligne");
             return;
         }
+        if (frMode) {
+            if (!VoskEngine.available(this)) {
+                flashStrip("Mod\u00E8le fran\u00E7ais absent de cette version");
+                return;
+            }
+            flashStrip("\u2026");
+            preloadVosk();
+            voice.once(pcm -> {
+                flashStrip("\u2026");
+                new Thread(() -> handleFr(pcm)).start();
+                return false;
+            }, () -> flashStrip("\uD83C\uDFA4 PARLEZ"));
+            return;
+        }
         if (VoiceStore.get(this).total() == 0) {
             flashStrip("Rien appris: Outils > Voix hors ligne");
             return;
@@ -750,6 +764,66 @@ public class KeyboardService extends InputMethodService {
             new Thread(() -> handleVoice(pcm)).start();
             return false;
         }, () -> flashStrip("\uD83C\uDFA4 PARLEZ"));
+    }
+
+    private boolean frMode = true;
+    private static volatile boolean voskLoading = false;
+
+    private CharSequence micLabel() {
+        try {
+            frMode = getSharedPreferences("cfg", Context.MODE_PRIVATE).getBoolean("voice_fr", true);
+        } catch (Throwable ignored) {
+        }
+        android.text.SpannableString sp = new android.text.SpannableString("\uD83C\uDFA4\n" + (frMode ? "FR" : "DA"));
+        sp.setSpan(new android.text.style.RelativeSizeSpan(0.55f), 2, sp.length(),
+                android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        return sp;
+    }
+
+    /** Charge le modele francais en arriere-plan (la premiere fois, il est copie depuis l'application). */
+    private void preloadVosk() {
+        if (voskLoading) return;
+        voskLoading = true;
+        final Context c = getApplicationContext();
+        new Thread(() -> {
+            try {
+                VoskEngine.load(c);
+            } finally {
+                voskLoading = false;
+            }
+        }).start();
+    }
+
+    /** Francais: Vosk limite aux nombres et aux ordres. Calcul hors du thread principal. */
+    private void handleFr(short[] pcm) {
+        try {
+            if (pcm == null || pcm.length == 0) {
+                showHandler.post(() -> flashStrip("Rien entendu (parlez apr\u00E8s PARLEZ)"));
+                return;
+            }
+            saveDebugWav(pcm);
+            final String text = VoskEngine.recognize(this, pcm);
+            final String dg = String.format(java.util.Locale.US, " [%.1fs]", pcm.length / 16000.0);
+            if (text == null) {
+                showHandler.post(() -> flashStrip("Mod\u00E8le fran\u00E7ais indisponible"));
+                return;
+            }
+            final String cmd = VoskEngine.command(text);
+            final String num = cmd == null ? FrenchNumbers.parse(text) : null;
+            showHandler.post(() -> {
+                if (cmd != null) {
+                    flashStrip("\u25B6 " + text);
+                    runVoiceCommand(cmd);
+                } else if (num != null) {
+                    for (int i = 0; i < num.length(); i++) press(String.valueOf(num.charAt(i)));
+                    flashStrip("\uD83C\uDFA4 " + num + "  (" + text + ")");
+                } else {
+                    flashStrip(text.isEmpty() ? "Rien compris" + dg : "Entendu : " + text + " \u2014 r\u00E9p\u00E9tez");
+                }
+            });
+        } catch (Throwable t) {
+            showHandler.post(() -> flashStrip("Erreur voix"));
+        }
     }
 
     /** Calcul lourd sur un thread; toute action sur l'ecran repasse par le thread principal. */
@@ -1340,8 +1414,19 @@ public class KeyboardService extends InputMethodService {
         mid.addView(makeKey("\u2699\nOPTIONS", C_LIGHT, C_LIGHT_SH, C_TEXT, 11,
                 () -> setInputView(buildOptions())),
                 lp(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
-        mid.addView(makeKey("\uD83C\uDFA4", C_LIGHT, C_LIGHT_SH, C_TEXT, 20, () -> onMic()),
-                lp(0, ViewGroup.LayoutParams.MATCH_PARENT, 0.6f));
+        final Button micKey = makeKey(micLabel(), C_LIGHT, C_LIGHT_SH, C_TEXT, 18, () -> onMic());
+        micKey.setOnLongClickListener(v -> {
+            frMode = !frMode;
+            try {
+                getSharedPreferences("cfg", Context.MODE_PRIVATE).edit().putBoolean("voice_fr", frMode).apply();
+            } catch (Throwable ignored) {
+            }
+            micKey.setText(micLabel());
+            flashStrip(frMode ? "Voix : FRAN\u00C7AIS (nombres et ordres)" : "Voix : DARIJA (appris)");
+            if (frMode) preloadVosk();
+            return true;
+        });
+        mid.addView(micKey, lp(0, ViewGroup.LayoutParams.MATCH_PARENT, 0.6f));
         right.addView(mid, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
@@ -2219,6 +2304,11 @@ public class KeyboardService extends InputMethodService {
     @Override
     public void onStartInputView(EditorInfo info, boolean restarting) {
         super.onStartInputView(info, restarting);
+        try {
+            if (getSharedPreferences("cfg", Context.MODE_PRIVATE).getBoolean("voice_fr", true)
+                    && VoskEngine.available(this)) preloadVosk();
+        } catch (Throwable ignored) {
+        }
         validHandler.removeCallbacks(validTick);
         validHandler.postDelayed(validTick, 300);
         autoHandler.removeCallbacks(autoSubmit);

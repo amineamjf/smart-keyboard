@@ -28,6 +28,15 @@ jobs:
         with:
           gradle-version: '8.7'
 
+      - name: Download French speech model (Vosk small, Apache 2.0)
+        run: |
+          set -e
+          curl -fL --retry 3 -o /tmp/vosk-fr.zip https://alphacephei.com/vosk/models/vosk-model-small-fr-0.22.zip
+          unzip -q /tmp/vosk-fr.zip -d /tmp/vosk-fr
+          mkdir -p app/src/main/assets
+          mv /tmp/vosk-fr/vosk-model-small-fr-0.22 app/src/main/assets/model-fr
+          ls app/src/main/assets/model-fr
+
       - name: Build debug APK
         run: gradle assembleDebug --no-daemon
 
