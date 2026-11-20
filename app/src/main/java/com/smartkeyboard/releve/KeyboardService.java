@@ -741,8 +741,8 @@ public class KeyboardService extends InputMethodService {
             return;
         }
         if (frMode) {
-            if (!VoskEngine.available(this)) {
-                flashStrip("Mod\u00E8le fran\u00E7ais absent de cette version");
+            if (!VoskEngine.installed(this)) {
+                startModelDownload();
                 return;
             }
             flashStrip("\u2026");
@@ -778,6 +778,23 @@ public class KeyboardService extends InputMethodService {
         sp.setSpan(new android.text.style.RelativeSizeSpan(0.55f), 2, sp.length(),
                 android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         return sp;
+    }
+
+    /** Premier usage du francais: telechargement unique du modele (internet requis une seule fois). */
+    private void startModelDownload() {
+        if (VoskEngine.downloading) {
+            flashStrip("T\u00E9l\u00E9chargement du mod\u00E8le : " + VoskEngine.percent + " %");
+            return;
+        }
+        flashStrip("T\u00E9l\u00E9chargement du mod\u00E8le fran\u00E7ais (une seule fois)\u2026");
+        final Context c = getApplicationContext();
+        new Thread(() -> {
+            String err = VoskEngine.download(c, p -> showHandler.post(
+                    () -> flashStrip("T\u00E9l\u00E9chargement du mod\u00E8le : " + p + " %")));
+            showHandler.post(() -> flashStrip(err == null
+                    ? "Mod\u00E8le pr\u00EAt : appuyez sur \uD83C\uDFA4"
+                    : "T\u00E9l\u00E9chargement impossible (" + err + ") \u2014 v\u00E9rifiez internet"));
+        }).start();
     }
 
     /** Charge le modele francais en arriere-plan (la premiere fois, il est copie depuis l'application). */
@@ -1281,6 +1298,17 @@ public class KeyboardService extends InputMethodService {
         return box;
     }
 
+    /** Ouvre la saisie rapide sur un compteur precis (ex. compteur absent de l'application d'origine). */
+    void openQuickFor(final Meters.Row r) {
+        showHandler.post(() -> {
+            try {
+                setInputView(buildQuick(r));
+                flashStrip("Non r\u00E9pertori\u00E9 : saisissez son index ici");
+            } catch (Throwable ignored) {
+            }
+        });
+    }
+
     private final QuickPanel.Host quickHost = new QuickPanel.Host() {
         @Override
         public void close() {
@@ -1423,7 +1451,10 @@ public class KeyboardService extends InputMethodService {
             }
             micKey.setText(micLabel());
             flashStrip(frMode ? "Voix : FRAN\u00C7AIS (nombres et ordres)" : "Voix : DARIJA (appris)");
-            if (frMode) preloadVosk();
+            if (frMode) {
+                if (VoskEngine.installed(this)) preloadVosk();
+                else startModelDownload();
+            }
             return true;
         });
         mid.addView(micKey, lp(0, ViewGroup.LayoutParams.MATCH_PARENT, 0.6f));
@@ -2330,7 +2361,7 @@ public class KeyboardService extends InputMethodService {
         super.onStartInputView(info, restarting);
         try {
             if (getSharedPreferences("cfg", Context.MODE_PRIVATE).getBoolean("voice_fr", true)
-                    && VoskEngine.available(this)) preloadVosk();
+                    && VoskEngine.installed(this)) preloadVosk();
         } catch (Throwable ignored) {
         }
         validHandler.removeCallbacks(validTick);

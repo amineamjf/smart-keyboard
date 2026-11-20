@@ -1,7 +1,6 @@
 package com.smartkeyboard.releve;
 
 import android.content.Context;
-import android.content.res.AssetManager;
 
 import org.json.JSONObject;
 import org.vosk.LibVosk;
@@ -31,41 +30,112 @@ public final class VoskEngine {
             "inaccessible", "noter", "note", "absent", "abonné", "analyser", "analyse", "consommation",
             "réaliser", "à", "[unk]"};
 
-    public static synchronized boolean available(Context c) {
+    private static final String[] URLS = {
+            "https://github.com/amineamjf/smart-keyboard/releases/download/models/vosk-model-small-fr-0.22.zip",
+            "https://alphacephei.com/vosk/models/vosk-model-small-fr-0.22.zip"};
+
+    public static volatile boolean downloading = false;
+    public static volatile int percent = 0;
+
+    public interface Progress {
+        void on(int percent);
+    }
+
+    public static boolean installed(Context c) {
+        return new File(c.getApplicationContext().getFilesDir(), "vosk-fr/.ok").exists();
+    }
+
+    /** Telecharge le modele francais (une seule fois) et le decompresse. A appeler hors du thread principal. */
+    public static synchronized String download(Context c, Progress cb) {
+        if (installed(c)) return null;
+        downloading = true;
+        percent = 0;
+        File dir = new File(c.getApplicationContext().getFilesDir(), "vosk-fr");
+        File tmp = new File(c.getApplicationContext().getFilesDir(), "vosk-fr.zip.part");
+        String err = "telechargement impossible";
         try {
-            return c.getAssets().list("model-fr") != null && c.getAssets().list("model-fr").length > 0;
-        } catch (Throwable t) {
-            return false;
-        }
-    }
-
-    private static void copy(AssetManager am, String src, File dst) throws Exception {
-        String[] kids = am.list(src);
-        if (kids != null && kids.length > 0) {
-            dst.mkdirs();
-            for (String k : kids) copy(am, src + "/" + k, new File(dst, k));
-        } else {
-            try (InputStream in = am.open(src); OutputStream out = new FileOutputStream(dst)) {
-                byte[] b = new byte[64 * 1024];
-                int r;
-                while ((r = in.read(b)) > 0) out.write(b, 0, r);
+            boolean got = false;
+            for (String u : URLS) {
+                try {
+                    java.net.HttpURLConnection h = (java.net.HttpURLConnection) new java.net.URL(u).openConnection();
+                    h.setConnectTimeout(15000);
+                    h.setReadTimeout(30000);
+                    h.setInstanceFollowRedirects(true);
+                    if (h.getResponseCode() != 200) {
+                        err = "serveur: " + h.getResponseCode();
+                        h.disconnect();
+                        continue;
+                    }
+                    long total = h.getContentLengthLong();
+                    long done = 0;
+                    try (InputStream in = h.getInputStream(); OutputStream out = new FileOutputStream(tmp)) {
+                        byte[] b = new byte[64 * 1024];
+                        int r;
+                        int last = -1;
+                        while ((r = in.read(b)) > 0) {
+                            out.write(b, 0, r);
+                            done += r;
+                            int p = total > 0 ? (int) (done * 95 / total) : 0;
+                            if (p != last) {
+                                last = p;
+                                percent = p;
+                                if (cb != null) cb.on(p);
+                            }
+                        }
+                    }
+                    h.disconnect();
+                    got = true;
+                    break;
+                } catch (Throwable t) {
+                    err = String.valueOf(t.getMessage());
+                }
             }
+            if (!got) return err;
+            deleteAll(dir);
+            dir.mkdirs();
+            try (java.util.zip.ZipInputStream z = new java.util.zip.ZipInputStream(new java.io.BufferedInputStream(
+                    new java.io.FileInputStream(tmp)))) {
+                java.util.zip.ZipEntry e;
+                byte[] b = new byte[64 * 1024];
+                String root = dir.getCanonicalPath() + File.separator;
+                while ((e = z.getNextEntry()) != null) {
+                    String name = e.getName();
+                    int sl = name.indexOf('/');
+                    if (sl < 0) continue;
+                    name = name.substring(sl + 1); // on retire le dossier racine du zip
+                    if (name.isEmpty() || e.isDirectory()) continue;
+                    File f = new File(dir, name);
+                    if (!f.getCanonicalPath().startsWith(root)) continue; // zip malveillant
+                    f.getParentFile().mkdirs();
+                    try (OutputStream out = new FileOutputStream(f)) {
+                        int r;
+                        while ((r = z.read(b)) > 0) out.write(b, 0, r);
+                    }
+                }
+            }
+            if (!new File(dir, "am").exists() && !new File(dir, "conf").exists()) {
+                deleteAll(dir);
+                return "archive du modele invalide";
+            }
+            new FileOutputStream(new File(dir, ".ok")).close();
+            percent = 100;
+            if (cb != null) cb.on(100);
+            return null;
+        } catch (Throwable t) {
+            deleteAll(dir);
+            return String.valueOf(t.getMessage());
+        } finally {
+            tmp.delete();
+            downloading = false;
         }
     }
 
-    /** Charge le modele (copie depuis l'application la premiere fois). A appeler hors du thread principal. */
+    /** Charge le modele. A appeler hors du thread principal. */
     public static synchronized boolean load(Context c) {
         if (model != null) return true;
-        if (failed) return false;
+        if (failed || !installed(c)) return false;
         try {
-            Context app = c.getApplicationContext();
-            File dir = new File(app.getFilesDir(), "vosk-fr");
-            File ok = new File(dir, ".ok");
-            if (!ok.exists()) {
-                deleteAll(dir);
-                copy(app.getAssets(), "model-fr", dir);
-                new FileOutputStream(ok).close();
-            }
+            File dir = new File(c.getApplicationContext().getFilesDir(), "vosk-fr");
             LibVosk.setLogLevel(LogLevel.WARNINGS);
             model = new Model(dir.getAbsolutePath());
             return true;

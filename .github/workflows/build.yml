@@ -4,6 +4,9 @@ on:
   push:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -28,14 +31,15 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Download French speech model (Vosk small, Apache 2.0)
+      - name: Publish French speech model once (downloaded by the app on first use)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          set -e
-          curl -fL --retry 3 -o /tmp/vosk-fr.zip https://alphacephei.com/vosk/models/vosk-model-small-fr-0.22.zip
-          unzip -q /tmp/vosk-fr.zip -d /tmp/vosk-fr
-          mkdir -p app/src/main/assets
-          mv /tmp/vosk-fr/vosk-model-small-fr-0.22 app/src/main/assets/model-fr
-          ls app/src/main/assets/model-fr
+          if ! gh release view models >/dev/null 2>&1; then
+            curl -fL --retry 3 -o vosk-model-small-fr-0.22.zip https://alphacephei.com/vosk/models/vosk-model-small-fr-0.22.zip
+            gh release create models vosk-model-small-fr-0.22.zip --title "Modeles vocaux" --notes "Vosk small fr 0.22 (Apache 2.0), telecharge par l'application a la premiere utilisation."
+          fi
 
       - name: Build debug APK
         run: gradle assembleDebug --no-daemon

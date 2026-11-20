@@ -298,7 +298,8 @@ public class ScanService extends AccessibilityService {
         if (i < 0) return null;
         for (int j = i + 1; j < Meters.ROWS.size(); j++) {
             Meters.Row x = Meters.ROWS.get(j);
-            if (x.extra || x.status == Meters.UNLISTED || x.status != Meters.NEW || !Meters.isActive(x)) continue;
+            if (x.extra || x.status == Meters.UNLISTED || x.status != Meters.NEW || !Meters.isActive(x)
+                    || Meters.isOffApp(x)) continue;
             return x;
         }
         return null;
@@ -733,6 +734,23 @@ public class ScanService extends AccessibilityService {
         }
     }
 
+    /**
+     * Compteur de notre base absent de l'application d'origine ("non repertorie"): on le marque comme tel (il sera
+     * saute au suivi) et on ouvre la saisie rapide pour entrer son index dans notre tableau.
+     */
+    private void offerOffApp(String key) {
+        try {
+            final Meters.Row r = Meters.find(key);
+            if (r == null || r.extra || !r.newIdx.isEmpty() || Meters.isOffApp(r)) return;
+            r.note = Meters.OFFAPP + " (absent de l'application)";
+            saveTable(this);
+            log("NON REPERTORIE: " + key + " absent de l'application, saisie dans notre tableau");
+            final KeyboardService k = KeyboardService.instance;
+            if (k != null) handler.post(() -> k.openQuickFor(r));
+        } catch (Throwable ignored) {
+        }
+    }
+
     private void gotoFail(String why) {
         log("ALLER: " + why);
         if (!fallbackKey.isEmpty()) {
@@ -749,9 +767,11 @@ public class ScanService extends AccessibilityService {
             gotoMeter(fb);
             return;
         }
+        final String failedKey = gotoKey;
         toast("Compteur " + gotoKey + ": " + why);
         following = false;
         gotoKey = null;
+        if (failedKey != null && why.startsWith("introuvable dans l'application")) offerOffApp(failedKey);
         gotoPhase = 0;
         gotoClosed = false;
         gotoTabText = "";
