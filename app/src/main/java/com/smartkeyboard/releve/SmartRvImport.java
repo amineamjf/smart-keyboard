@@ -19,7 +19,7 @@ final class SmartRvImport {
     }
 
     private static final class M {
-        String tour = "", meter = "", contract = "", name = "", address = "", phone = "", prev = "", cur = "", ano = "";
+        String gps = "", tour = "", meter = "", contract = "", name = "", address = "", phone = "", prev = "", cur = "", ano = "";
         double sort = Double.MAX_VALUE;
         final HashMap<Integer, String> hist = new HashMap<>();
     }
@@ -72,6 +72,7 @@ final class SmartRvImport {
                         case "name": m.name = str(r); break;
                         case "address": m.address = str(r); break;
                         case "phone": m.phone = str(r); break;
+                        case "gps": m.gps = str(r); break;
                         case "prev": m.prev = str(r); break;
                         case "current": m.cur = str(r); break;
                         case "anomaly": m.ano = str(r); break;
@@ -126,7 +127,7 @@ final class SmartRvImport {
         }
         ArrayList<String> head = new ArrayList<>();
         Collections.addAll(head, "Tournée", "N Compteur", "N Contrat", "Client", "Adresse", "Tel",
-                "Ancien index", "Nouvel index", "Anomalie");
+                "Ancien index", "Nouvel index", "Anomalie", "GPS");
         for (int mi : ms) head.add("Hist " + MONTHS[mi]);
         ArrayList<String[]> rows = new ArrayList<>();
         rows.add(head.toArray(new String[0]));
@@ -143,9 +144,10 @@ final class SmartRvImport {
             row[6] = m.prev;
             row[7] = m.cur;
             row[8] = ano;
+            row[9] = m.gps;
             for (int i = 0; i < ms.size(); i++) {
                 String v = m.hist.get(ms.get(i));
-                row[9 + i] = v == null ? "" : v;
+                row[10 + i] = v == null ? "" : v;
             }
             rows.add(row);
         }

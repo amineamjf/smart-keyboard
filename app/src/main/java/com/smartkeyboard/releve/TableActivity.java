@@ -712,7 +712,7 @@ public class TableActivity extends Activity {
     private void shareReport() {
         shareBuilt("rapport-releve-" + today() + ".xlsx",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                () -> XlsxReport.build(ScanService.maxJump, ScanService.maxDrop));
+                () -> SmartRvXlsx.build());
     }
 
     private void exportTodo() {
@@ -1498,7 +1498,7 @@ public class TableActivity extends Activity {
             } else if (req == REQ_UNL) {
                 os.write(XlsxReport.buildUnlisted());
             } else if (req == REQ_XLSX) {
-                os.write(XlsxReport.build(ScanService.maxJump, ScanService.maxDrop));
+                os.write(SmartRvXlsx.build());
             } else {
                 os.write(Meters.csv().getBytes("UTF-8"));
             }
