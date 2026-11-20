@@ -267,6 +267,30 @@ public class ScanService extends AccessibilityService {
     private Meters.Row undoRow = null;
     private int undoIndex = -1;
 
+    /** Memorise le dernier compteur saisi (aussi sur disque: survit a un redemarrage du service). */
+    private void setLastEntered(Meters.Row r) {
+        lastEntered = r;
+        try {
+            getSharedPreferences("cfg", MODE_PRIVATE).edit().putString("lastEnteredKey", r.key).apply();
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Dernier compteur saisi, retrouve sur disque si la memoire est vide. */
+    private Meters.Row lastRow() {
+        if (lastEntered != null && Meters.ROWS.contains(lastEntered)) return lastEntered;
+        try {
+            String k = getSharedPreferences("cfg", MODE_PRIVATE).getString("lastEnteredKey", "");
+            Meters.Row r = k.isEmpty() ? null : Meters.find(k);
+            if (r != null) {
+                lastEntered = r;
+                return r;
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
     /** Prochain compteur de la base apres `cur` (non traite, ni ajoute a la main). */
     private Meters.Row nextAfter(Meters.Row cur) {
         if (cur == null) return null;
@@ -317,11 +341,12 @@ public class ScanService extends AccessibilityService {
         String id = readMeterId(root);
         Meters.Row r = id.isEmpty() ? null : Meters.find(id);
         if (r == null) return "Ce compteur n'est pas dans le tableau";
-        if (lastEntered == null) return "Aucun compteur saisi depuis le demarrage";
-        if (r == lastEntered) return "C'est deja le dernier compteur saisi";
+        Meters.Row last = lastRow();
+        if (last == null) return "Aucun compteur saisi: saisissez d'abord un compteur";
+        if (r == last) return "C'est deja le dernier compteur saisi";
         int from = Meters.ROWS.indexOf(r);
         Meters.ROWS.remove(r);
-        int to = Meters.ROWS.indexOf(lastEntered);
+        int to = Meters.ROWS.indexOf(last);
         if (to < 0) {
             Meters.ROWS.add(Math.min(from, Meters.ROWS.size()), r);
             return "Dernier compteur introuvable dans le tableau";
@@ -330,28 +355,30 @@ public class ScanService extends AccessibilityService {
         undoRow = r;
         undoIndex = from;
         saveTable(this);
-        log("DEPLACE: " + r.key + " place apres " + lastEntered.key);
-        return "\u2713 Deplace: " + r.key + " place apres " + lastEntered.key;
+        log("DEPLACE: " + r.key + " place apres " + last.key);
+        return "\u2713 " + r.key + " plac\u00E9 apr\u00E8s " + last.key + " (position " + (to + 2) + ")";
     }
 
     /** Place un compteur du tableau juste apres le dernier compteur saisi (saisie rapide). */
     public String placeAfterLast(Meters.Row r) {
         if (r == null) return "";
-        if (lastEntered == null) return "aucun compteur saisi depuis le demarrage";
-        if (r == lastEntered) return "";
+        Meters.Row last = lastRow();
+        if (last == null) return "ordre NON chang\u00E9: aucun compteur saisi avant";
+        if (r == last) return "";
         int from = Meters.ROWS.indexOf(r);
-        if (from < 0) return "compteur introuvable";
+        if (from < 0) return "ordre NON chang\u00E9: compteur introuvable";
         Meters.ROWS.remove(r);
-        int to = Meters.ROWS.indexOf(lastEntered);
+        int to = Meters.ROWS.indexOf(last);
         if (to < 0) {
             Meters.ROWS.add(Math.min(from, Meters.ROWS.size()), r);
-            return "dernier compteur introuvable";
+            return "ordre NON chang\u00E9: dernier compteur introuvable";
         }
         Meters.ROWS.add(to + 1, r);
         undoRow = r;
         undoIndex = from;
-        log("DEPLACE: " + r.key + " place apres " + lastEntered.key + " (saisie rapide)");
-        return "plac\u00E9 apr\u00E8s " + lastEntered.key;
+        saveTable(this);
+        log("DEPLACE: " + r.key + " place apres " + last.key + " (saisie rapide)");
+        return "plac\u00E9 apr\u00E8s " + last.key + ", position " + (to + 2);
     }
 
     public String undoMove() {
@@ -1229,7 +1256,7 @@ public class ScanService extends AccessibilityService {
                 r = Meters.addExtra(shown.isEmpty() ? subKey : shown, subKey);
             }
             r.newIdx = value;
-            if (!r.extra && r.status != Meters.UNLISTED) lastEntered = r;
+            if (!r.extra && r.status != Meters.UNLISTED) setLastEntered(r);
             if (r.note.isEmpty()) r.note = "saisi: " + value + " (envoi en cours)";
             saveTable(this);
         } catch (Exception e) {
@@ -1277,7 +1304,7 @@ public class ScanService extends AccessibilityService {
                 getSharedPreferences("cfg", MODE_PRIVATE).edit().putString("lastSent", subKey).apply();
             } catch (Exception ignored) {
             }
-            if (!r.extra && r.status != Meters.UNLISTED) lastEntered = r;
+            if (!r.extra && r.status != Meters.UNLISTED) setLastEntered(r);
             if (userSearch) {
                 userSearch = false;
                 if (!r.extra && !autoRunning) {
@@ -5001,7 +5028,7 @@ public class ScanService extends AccessibilityService {
                 }
                 if (txt.equals(r.newIdx)) return;
                 r.newIdx = txt;
-                if (!r.extra && r.status != Meters.UNLISTED) lastEntered = r;
+                if (!r.extra && r.status != Meters.UNLISTED) setLastEntered(r);
                 if (r.status != Meters.SENT) r.note = "saisi: " + txt + " (a confirmer)";
                 saveTable(ScanService.this);
                 log("SAISIE notee: " + id + " = " + txt);
