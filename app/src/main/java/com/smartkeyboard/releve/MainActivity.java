@@ -453,7 +453,23 @@ public class MainActivity extends Activity {
         new Thread(() -> {
             String msg;
             try (InputStream in = getContentResolver().openInputStream(uri)) {
-                List<List<String[]>> sheets = TableReader.read(in);
+                java.io.BufferedInputStream pin = new java.io.BufferedInputStream(in);
+                pin.mark(16);
+                int b0 = pin.read();
+                int guard = 0;
+                while ((b0 == ' ' || b0 == '\n' || b0 == '\r' || b0 == '\t' || b0 == 0xEF || b0 == 0xBB || b0 == 0xBF)
+                        && guard++ < 10) b0 = pin.read();
+                pin.reset();
+                if (b0 == '{') {
+                    // BOM eventuel: on le saute pour le lecteur JSON
+                    pin.mark(4);
+                    if (pin.read() != 0xEF) pin.reset();
+                    else {
+                        pin.read();
+                        pin.read();
+                    }
+                }
+                List<List<String[]>> sheets = b0 == '{' ? SmartRvImport.read(pin) : TableReader.read(pin);
                 final int n = Meters.importSheets(sheets);
                 if (Meters.lastWasClosed) {
                     Meters.saveClosed(new java.io.File(getFilesDir(), "closed.tsv"));

@@ -86,7 +86,7 @@ public class TableActivity extends Activity {
             case F_PHOTO: return !r.photos.isEmpty();
             case F_HIGH: {
                 long cs = consOf(r);
-                return cs != Long.MIN_VALUE && cs >= 0 && cs > ScanService.maxJump;
+                return cs != Long.MIN_VALUE && Smart.high(r, cs);
             }
             case F_NEG: {
                 long cs = consOf(r);
@@ -94,7 +94,7 @@ public class TableActivity extends Activity {
             }
             case F_OUT:
                 return r.oldIdx.matches("\\d{1,9}") && r.newIdx.matches("\\d{1,9}")
-                        && ScanService.outOfRange(Long.parseLong(r.oldIdx), Long.parseLong(r.newIdx));
+                        && ScanService.outOfRange(r, Long.parseLong(r.oldIdx), Long.parseLong(r.newIdx));
             default: return true;
         }
     }
@@ -398,7 +398,7 @@ public class TableActivity extends Activity {
     private View rowViewInner(Meters.Row r) {
         final long csv = consOf(r);
         final boolean isNeg = csv != Long.MIN_VALUE && csv < 0;
-        final boolean isHigh = csv != Long.MIN_VALUE && csv >= 0 && csv > ScanService.maxJump;
+        final boolean isHigh = csv != Long.MIN_VALUE && Smart.high(r, csv);
         final boolean isStop = csv == 0 && r.oldIdx.matches("\\d{1,9}") && r.newIdx.matches("\\d{1,9}");
         int fillC = C_OK, lineC = C_OK_L;
         if (isNeg) {

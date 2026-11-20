@@ -2590,10 +2590,10 @@ public class ScanService extends AccessibilityService {
             }
             long o = Long.parseLong(r.oldIdx);
             long n = Long.parseLong(v);
-            if (outOfRange(o, n)) {
+            if (outOfRange(r, o, n)) {
                 holdT = SystemClock.uptimeMillis();
                 log("attente: " + v + (n < o ? " trop bas par rapport a l'ancien " : " trop haut par rapport a l'ancien ") + o
-                        + " (limites +" + maxJump + " / -" + maxDrop + ", valider a la main)");
+                        + " (" + Smart.describe(r) + " / -" + maxDrop + ", valider a la main)");
                 refreshStrip();
                 return false;
             }
@@ -3436,6 +3436,11 @@ public class ScanService extends AccessibilityService {
     public static boolean outOfRange(long o, long n) {
         return n > o + maxJump || n < o - maxDrop;
     }
+
+    /** Idem, mais la hausse acceptee vient de l'historique du compteur (seuil intelligent) quand il existe. */
+    public static boolean outOfRange(Meters.Row r, long o, long n) {
+        return n - o > Smart.limit(r) || n < o - maxDrop;
+    }
     private static boolean cfgLoaded = false;
 
     private static final int A_READ = 1, A_SW_WAIT = 2, A_CLEAR = 3,
@@ -3500,6 +3505,8 @@ public class ScanService extends AccessibilityService {
             Meters.loadClosed(new java.io.File(c.getFilesDir(), "closed.tsv"));
             maxJump = sp.getLong("maxJump2", 50);
             maxDrop = sp.getLong("maxDrop", 10);
+            Smart.factorX10 = sp.getInt("smartX", 20);
+            Smart.minRise = sp.getLong("smartMin", 5);
         }
         if (Meters.ROWS.isEmpty()) {
             Meters.load(new java.io.File(c.getFilesDir(), "table.tsv"));
@@ -3523,7 +3530,8 @@ public class ScanService extends AccessibilityService {
     public static void saveCfg(android.content.Context c) {
         c.getSharedPreferences("cfg", android.content.Context.MODE_PRIVATE).edit()
                 .putInt("photoMode", photoMode).putLong("maxJump2", maxJump)
-                .putLong("maxDrop", maxDrop).apply();
+                .putLong("maxDrop", maxDrop).putInt("smartX", Smart.factorX10)
+                .putLong("smartMin", Smart.minRise).apply();
     }
 
     private static final java.util.concurrent.ExecutorService SAVER =
@@ -3880,9 +3888,9 @@ public class ScanService extends AccessibilityService {
         if (r.oldIdx.matches("\\d{1,9}")) {
             long o = Long.parseLong(r.oldIdx);
             long n = Long.parseLong(val);
-            if (!aForce && outOfRange(o, n)) {
-                aMark(Meters.SUSPECT, "ecart " + (n >= o ? "+" : "") + (n - o) + " hors limites (+"
-                        + maxJump + " / -" + maxDrop + "), a confirmer");
+            if (!aForce && outOfRange(r, o, n)) {
+                aMark(Meters.SUSPECT, "ecart " + (n >= o ? "+" : "") + (n - o) + " hors limites ("
+                        + Smart.describe(r) + " / -" + maxDrop + "), a confirmer");
                 aSwipe();
                 return;
             }
@@ -4875,8 +4883,9 @@ public class ScanService extends AccessibilityService {
                             oflag = 2;
                             note = note.isEmpty() ? "\u26A0 ancien > nouveau : ancien douteux ?"
                                     : note + " | ancien > nouveau";
-                        } else if (outOfRange(ov, nv)) {
+                        } else if (outOfRange(r, ov, nv)) {
                             oflag = 1;
+                            note = note.isEmpty() ? "\u26A0 " + Smart.describe(r) : note + " | " + Smart.describe(r);
                         }
                     }
                 } catch (Throwable ignored) {

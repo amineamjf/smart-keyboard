@@ -45,7 +45,7 @@ final class Verdict {
         if (!num(r.oldIdx) || !num(r.newIdx)) return NONE;
         long o = Long.parseLong(r.oldIdx), n = Long.parseLong(r.newIdx);
         if (n < o) return NEG;
-        if (n > o + maxJump) return OUT;
+        if (n - o > Smart.limit(r)) return OUT;
         String t = Meters.tourneeOf(r);
         Long m = med == null ? null : med.get(t == null ? "" : t);
         long c = n - o;

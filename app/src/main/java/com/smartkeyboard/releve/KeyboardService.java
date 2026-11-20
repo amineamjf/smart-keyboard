@@ -2060,6 +2060,30 @@ public class KeyboardService extends InputMethodService {
                 ScanService.saveCfg(this);
                 again.run();
             });
+            pg.card(OptUi.UP, OptUi.AMBER, "Seuil intelligent", "\u00D7" + (Smart.factorX10 / 10.0)
+                    + " l'habituel \u2022 toucher", -1, () -> {
+                int[] f = {15, 20, 25, 30, 40};
+                int nx = f[0];
+                for (int i = 0; i < f.length; i++) if (f[i] > Smart.factorX10) {
+                    nx = f[i];
+                    break;
+                }
+                Smart.factorX10 = nx;
+                ScanService.saveCfg(this);
+                again.run();
+            });
+            pg.card(OptUi.UP, OptUi.AMBER, "Hausse minimale", "jamais sous +" + Smart.minRise + " m\u00B3 \u2022 toucher",
+                    -1, () -> {
+                long[] f = {3, 5, 8, 10, 15};
+                long nx = f[0];
+                for (int i = 0; i < f.length; i++) if (f[i] > Smart.minRise) {
+                    nx = f[i];
+                    break;
+                }
+                Smart.minRise = nx;
+                ScanService.saveCfg(this);
+                again.run();
+            });
             pg.card(OptUi.DOWN, OptUi.AMBER, "Baisse max", "-" + ScanService.maxDrop + " m\u00B3 \u2022 toucher", -1, () -> {
                 ScanService.maxDrop = nextPreset(ScanService.maxDrop, DOWN_PRESETS);
                 ScanService.saveCfg(this);

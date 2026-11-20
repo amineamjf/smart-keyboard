@@ -201,7 +201,7 @@ public final class XlsxReport {
             int vs = nu;
             if (!x[5].isEmpty()) {
                 long cv = Long.parseLong(x[5]);
-                vs = cv < 0 ? S_V_NEG : cv > limUp ? S_V_HIGH : cv == 0 ? S_V_ZERO : S_V_OK;
+                vs = cv < 0 ? S_V_NEG : cv > Smart.limit(m) ? S_V_HIGH : cv == 0 ? S_V_ZERO : S_V_OK;
             }
             sb.append("<row r=\"").append(r).append("\" ht=\"24\" customHeight=\"1\">");
             txt(sb, 0, r, S_CHIP, x[0]);
