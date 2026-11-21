@@ -819,7 +819,8 @@ public class KeyboardService extends InputMethodService {
             final String text = VoskEngine.recognize(this, pcm);
             final String dg = String.format(java.util.Locale.US, " [%.1fs]", pcm.length / 16000.0);
             if (text == null) {
-                showHandler.post(() -> flashStrip("Mod\u00E8le fran\u00E7ais indisponible"));
+                final String le = VoskEngine.lastError;
+                showHandler.post(() -> flashStrip("Mod\u00E8le FR indisponible : " + le));
                 return;
             }
             final String cmd = VoskEngine.command(text);

@@ -16,7 +16,7 @@ import java.io.OutputStream;
 /** Reconnaissance francaise hors ligne (Vosk, modele fr embarque) limitee aux nombres et aux ordres. */
 public final class VoskEngine {
     private static Model model;
-    private static boolean failed = false;
+    public static volatile String lastError = "";
 
     private VoskEngine() {
     }
@@ -133,14 +133,18 @@ public final class VoskEngine {
     /** Charge le modele. A appeler hors du thread principal. */
     public static synchronized boolean load(Context c) {
         if (model != null) return true;
-        if (failed || !installed(c)) return false;
+        if (!installed(c)) {
+            lastError = "mod\u00E8le non install\u00E9";
+            return false;
+        }
         try {
             File dir = new File(c.getApplicationContext().getFilesDir(), "vosk-fr");
             LibVosk.setLogLevel(LogLevel.WARNINGS);
             model = new Model(dir.getAbsolutePath());
+            lastError = "";
             return true;
         } catch (Throwable t) {
-            failed = true;
+            lastError = t.getClass().getSimpleName() + ": " + t.getMessage();
             return false;
         }
     }
@@ -167,6 +171,7 @@ public final class VoskEngine {
             JSONObject o = new JSONObject(r.getFinalResult());
             return o.optString("text", "").replace("[unk]", "").replaceAll("\\s+", " ").trim();
         } catch (Throwable t) {
+            lastError = t.getClass().getSimpleName() + ": " + t.getMessage();
             return null;
         } finally {
             if (r != null) {
