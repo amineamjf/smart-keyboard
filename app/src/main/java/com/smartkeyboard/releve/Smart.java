@@ -65,6 +65,20 @@ final class Smart {
         return n % 2 == 1 ? rates.get(n / 2) : (rates.get(n / 2 - 1) + rates.get(n / 2)) / 2;
     }
 
+    /** Index attendu comme SmartRV: ancien index + consommation habituelle; -1 si pas assez d'historique. */
+    static long expected(Meters.Row r) {
+        try {
+            if (r == null || r.oldIdx == null) return -1;
+            String s = r.oldIdx.trim();
+            if (s.isEmpty()) return -1;
+            double u = usual(r);
+            if (u < 0) return -1;
+            return Math.round(Double.parseDouble(s.replace(',', '.')) + u);
+        } catch (Throwable t) {
+            return -1;
+        }
+    }
+
     /** Plus forte hausse acceptee pour ce compteur. */
     static long limit(Meters.Row r) {
         long fixed = ScanService.maxJump > 0 ? ScanService.maxJump : Long.MAX_VALUE;

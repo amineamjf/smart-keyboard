@@ -4992,8 +4992,15 @@ public class ScanService extends AccessibilityService {
                 } catch (Throwable ignored) {
                 }
                 k.setOldFlag(oflag);
+                try {
+                    boolean typed = r.newIdx != null && !r.newIdx.trim().isEmpty();
+                    long ex = (!typed && r.status != Meters.SENT) ? Smart.expected(r) : -1;
+                    FloatCards.updateExpected(ex >= 0 ? String.valueOf(ex) : "");
+                } catch (Throwable ignored) {
+                }
                 k.setStripData(name, r.oldIdx, r.newIdx, r.status == Meters.SUSPECT, note);
             } else if (!shown.isEmpty()) {
+                FloatCards.updateExpected("");
                 k.setOldFlag(0);
                 String z = shown.trim();
                 int zi = 0;

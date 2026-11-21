@@ -21,18 +21,18 @@ import android.widget.TextView;
  * Tout est protege: en cas d'erreur la fenetre n'apparait simplement pas (le bandeau reste comme avant).
  */
 final class FloatCards {
-    static final int OLD = 0, NEW = 1;
+    static final int OLD = 0, NEW = 1, EXP = 2;
     /** 1 = ancien seul, 2 = nouveau seul, 3 = les deux. */
     private static final String K_ON = "fc_on", K_MODE = "fc_mode";
 
     private static final Handler UI = new Handler(Looper.getMainLooper());
-    private static final View[] VIEW = new View[2];
-    private static final TextView[] VAL = new TextView[2];
-    private static final TextView[] LAB = new TextView[2];
-    private static final WindowManager.LayoutParams[] LP = new WindowManager.LayoutParams[2];
-    private static final boolean[] SHOWN = new boolean[2];
+    private static final View[] VIEW = new View[3];
+    private static final TextView[] VAL = new TextView[3];
+    private static final TextView[] LAB = new TextView[3];
+    private static final WindowManager.LayoutParams[] LP = new WindowManager.LayoutParams[3];
+    private static final boolean[] SHOWN = new boolean[3];
     private static boolean suspended = false;
-    private static String tOld = "", tNew = "";
+    private static String tOld = "", tNew = "", tExp = "";
     private static int flagOld = 0;
     private static boolean sus = false;
 
@@ -53,10 +53,10 @@ final class FloatCards {
 
     static int mode(Context c) {
         try {
-            int m = prefs(c).getInt(K_MODE, 3);
-            return m < 1 || m > 3 ? 3 : m;
+            int m = prefs(c).getInt(K_MODE, 7);
+            return m < 1 || m > 7 ? 7 : m;
         } catch (Throwable t) {
-            return 3;
+            return 7;
         }
     }
 
@@ -69,10 +69,10 @@ final class FloatCards {
     static void reset() {
         try {
             ScanService s = ScanService.instance;
-            for (int i = 0; i < 2; i++) if (s != null && SHOWN[i]) remove(s, i);
+            for (int i = 0; i < 3; i++) if (s != null && SHOWN[i]) remove(s, i);
         } catch (Throwable ignored) {
         }
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < 3; i++) {
             SHOWN[i] = false;
             VIEW[i] = null;
         }
@@ -109,7 +109,7 @@ final class FloatCards {
     }
 
     static String modeName(int m) {
-        return m == 1 ? "Ancien seul" : (m == 2 ? "Nouveau seul" : "Ancien + Nouveau");
+        return m == 1 ? "Ancien seul" : (m == 2 ? "Nouveau seul" : (m == 3 ? "Ancien + Nouveau" : "Ancien + Nouveau + Attendu"));
     }
 
     /** Bouton du bandeau, appui court. Retourne le nouvel etat. */
@@ -126,7 +126,7 @@ final class FloatCards {
     /** Bouton du bandeau, appui long: Ancien + Nouveau -> Ancien seul -> Nouveau seul. */
     static int cycleMode(Context c) {
         int m = mode(c);
-        int nx = m == 3 ? 1 : (m == 1 ? 2 : 3);
+        int nx = m == 7 ? 3 : (m == 3 ? 1 : (m == 1 ? 2 : 7));
         try {
             prefs(c).edit().putInt(K_MODE, nx).putBoolean(K_ON, true).apply();
         } catch (Throwable ignored) {
@@ -139,6 +139,16 @@ final class FloatCards {
     static void setSuspended(boolean s) {
         suspended = s;
         refresh();
+    }
+
+    /** Index attendu (ancien + consommation habituelle), comme SmartRV; vide = rien a afficher. */
+    static void updateExpected(String text) {
+        String t = text == null ? "" : text;
+        if (t.equals(tExp)) return;
+        boolean toggled = t.isEmpty() != tExp.isEmpty();
+        tExp = t;
+        if (toggled) refresh();
+        else UI.post(FloatCards::paint);
     }
 
     static void update(String old, String nw, int oldFlag, boolean suspect) {
@@ -160,8 +170,8 @@ final class FloatCards {
                 ScanService s = ScanService.instance;
                 boolean want = s != null && isOn(s) && !suspended;
                 int m = s == null ? 3 : mode(s);
-                for (int i = 0; i < 2; i++) {
-                    boolean w = want && (m & (1 << i)) != 0;
+                for (int i = 0; i < 3; i++) {
+                    boolean w = want && (m & (1 << i)) != 0 && (i != EXP || !tExp.isEmpty());
                     if (w && !SHOWN[i]) add(s, i);
                     else if (!w && SHOWN[i]) remove(s, i);
                 }
@@ -192,7 +202,7 @@ final class FloatCards {
             lab.setTextSize(11);
             lab.setTypeface(Typeface.create("sans-serif-thin", Typeface.NORMAL));
             lab.setGravity(Gravity.CENTER_VERTICAL);
-            lab.setText(i == OLD ? "Ancien" : "Nouveau");
+            lab.setText(i == OLD ? "Ancien" : (i == NEW ? "Nouveau" : "Attendu"));
             TextView val = new TextView(s);
             val.setTextSize(30);
             val.setTypeface(Typeface.create("sans-serif-condensed", Typeface.BOLD));
@@ -219,7 +229,7 @@ final class FloatCards {
             lp.gravity = Gravity.TOP | Gravity.START;
             SharedPreferences p = prefs(s);
             lp.x = p.getInt("fc_x" + i, (int) (10 * d));
-            lp.y = p.getInt("fc_y" + i, (int) ((i == OLD ? 110 : 190) * d));
+            lp.y = p.getInt("fc_y" + i, (int) ((i == OLD ? 110 : (i == NEW ? 190 : 270)) * d));
             lp.x = Math.max(0, Math.min(lp.x, dm.widthPixels - (int) (60 * d)));
             lp.y = Math.max(0, Math.min(lp.y, dm.heightPixels - (int) (60 * d)));
             LP[i] = lp;
@@ -281,11 +291,14 @@ final class FloatCards {
 
     private static void paint() {
         try {
-            for (int i = 0; i < 2; i++) {
+            for (int i = 0; i < 3; i++) {
                 if (VIEW[i] == null || !SHOWN[i]) continue;
-                String t = i == OLD ? tOld : tNew;
+                String t = i == OLD ? tOld : (i == NEW ? tNew : tExp);
                 int bg, tx;
-                if (i == OLD && flagOld == 2) {
+                if (i == EXP) {
+                    bg = 0xFFE6E9EC;
+                    tx = 0xFF5B6770;
+                } else if (i == OLD && flagOld == 2) {
                     bg = 0xFFD32F2F;
                     tx = 0xFFFFFFFF;
                 } else if ((i == OLD && flagOld == 1) || (i == NEW && sus)) {
