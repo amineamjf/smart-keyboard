@@ -3448,6 +3448,12 @@ public class ScanService extends AccessibilityService {
     // ---------- Automatisation (tableau Excel) ----------
 
     public static boolean autoRunning = false;
+    /** true: un ecart hors limites est saute (a confirmer); false: automatise quand meme. */
+    public static boolean skipHigh = true;
+    /** Anomalies (texte normalise) que l'auto doit sauter au lieu de photographier. */
+    public static final java.util.Set<String> SKIP_ANOMS =
+            java.util.Collections.synchronizedSet(new java.util.TreeSet<String>());
+    public static final String SKIP_TAG = "SAUTE AUTO: ";
     public static int photoMode = 0;       // 0 = photo auto, 1 = sauter, 2 = arreter
     public static long maxJump = 50;       // hausse maximale acceptee (nouvel - ancien)
     public static long maxDrop = 10;       // baisse maximale acceptee (ancien - nouvel)
@@ -3512,6 +3518,11 @@ public class ScanService extends AccessibilityService {
             android.content.SharedPreferences sp =
                     c.getSharedPreferences("cfg", android.content.Context.MODE_PRIVATE);
             photoMode = sp.getInt("photoMode", 0);
+            skipHigh = sp.getBoolean("skipHigh", true);
+            SKIP_ANOMS.clear();
+            for (String t : sp.getString("skipAnoms", "").split("\u0001")) {
+                if (!t.isEmpty()) SKIP_ANOMS.add(t);
+            }
             photoProof = sp.getBoolean("photoProof4", false);
             fast = sp.getBoolean("fast", false);
             followDb = sp.getBoolean("follow", true);
@@ -3547,11 +3558,46 @@ public class ScanService extends AccessibilityService {
                 .putString("tournees", sb.toString()).apply();
     }
 
+    private static String skipAnomsString() {
+        StringBuilder sb = new StringBuilder();
+        synchronized (SKIP_ANOMS) {
+            for (String t : SKIP_ANOMS) sb.append(t).append('\u0001');
+        }
+        return sb.toString();
+    }
+
+    /** Compteurs que l'auto a sautes (avec la raison dans la note). */
+    public static boolean isSkipped(Meters.Row r) {
+        return r.note != null && r.note.contains(SKIP_TAG) && r.status != Meters.SENT
+                && (r.status == Meters.PHOTO || r.status == Meters.SUSPECT || r.status == Meters.NODATA
+                || r.status == Meters.UNKNOWN || r.status == Meters.ERROR);
+    }
+
+    public static int countSkipped() {
+        int n = 0;
+        for (Meters.Row r : Meters.ROWS) if (isSkipped(r)) n++;
+        return n;
+    }
+
+    /** Remet les compteurs sautes a "non vu" pour que l'auto les retraite (apres correction dans le tableau). */
+    public static int requeueSkipped() {
+        int n = 0;
+        for (Meters.Row r : Meters.ROWS) {
+            if (isSkipped(r)) {
+                r.status = Meters.NEW;
+                r.note = "a retraiter (etait saute)";
+                n++;
+            }
+        }
+        return n;
+    }
+
     public static void saveCfg(android.content.Context c) {
         c.getSharedPreferences("cfg", android.content.Context.MODE_PRIVATE).edit()
                 .putInt("photoMode", photoMode).putLong("maxJump2", maxJump)
                 .putLong("maxDrop", maxDrop).putInt("smartX", Smart.factorX10)
-                .putLong("smartMin", Smart.minRise).apply();
+                .putLong("smartMin", Smart.minRise).putBoolean("skipHigh", skipHigh)
+                .putString("skipAnoms", skipAnomsString()).apply();
     }
 
     private static final java.util.concurrent.ExecutorService SAVER =
@@ -3765,7 +3811,7 @@ public class ScanService extends AccessibilityService {
             aGo(A_READ, 1000);
             return;
         }
-        aMark(status, msg);
+        aMark(status, status == Meters.ERROR ? SKIP_TAG + msg : msg);
         autoStop(msg);
     }
 
@@ -3870,8 +3916,13 @@ public class ScanService extends AccessibilityService {
         boolean hasAnnot = !Meters.noAnnotation(r.annotation);
 
         if (hasAnom) {
+            if (photoMode == 0 && SKIP_ANOMS.contains(Meters.norm(r.anomaly))) {
+                aMark(Meters.PHOTO, SKIP_TAG + "anomalie choisie: " + r.anomaly);
+                aSwipe();
+                return;
+            }
             if (photoMode == 1) {
-                aMark(Meters.PHOTO, "photo requise (anomalie " + r.anomaly + "), saute");
+                aMark(Meters.PHOTO, SKIP_TAG + "photo requise (anomalie " + r.anomaly + ")");
                 aSwipe();
                 return;
             }
@@ -3896,20 +3947,20 @@ public class ScanService extends AccessibilityService {
             val = r.oldIdx;
         }
         if (val.isEmpty()) {
-            aMark(Meters.NODATA, "pas de nouvel index, saute");
+            aMark(Meters.NODATA, SKIP_TAG + "pas de nouvel index");
             aSwipe();
             return;
         }
         if (!val.matches("\\d{1,9}")) {
-            aMark(Meters.SUSPECT, "index invalide: " + val + ", non envoye");
+            aMark(Meters.SUSPECT, SKIP_TAG + "index invalide: " + val);
             aSwipe();
             return;
         }
         if (r.oldIdx.matches("\\d{1,9}")) {
             long o = Long.parseLong(r.oldIdx);
             long n = Long.parseLong(val);
-            if (!aForce && outOfRange(r, o, n)) {
-                aMark(Meters.SUSPECT, "ecart " + (n >= o ? "+" : "") + (n - o) + " hors limites ("
+            if (!aForce && skipHigh && outOfRange(r, o, n)) {
+                aMark(Meters.SUSPECT, SKIP_TAG + "ecart " + (n >= o ? "+" : "") + (n - o) + " hors limites ("
                         + Smart.describe(r) + " / -" + maxDrop + "), a confirmer");
                 aSwipe();
                 return;
@@ -4050,7 +4101,7 @@ public class ScanService extends AccessibilityService {
             log("options vues: " + texts);
             performGlobalAction(GLOBAL_ACTION_BACK);
             if (ann) {
-                aMark(Meters.UNKNOWN, "annotation inconnue: " + wanted + ", saute");
+                aMark(Meters.UNKNOWN, SKIP_TAG + "annotation inconnue: " + wanted);
                 aGo(A_AN_BACK, 700);
             } else {
                 aFail(Meters.UNKNOWN, "STOP: anomalie inconnue: " + wanted
@@ -4168,7 +4219,7 @@ public class ScanService extends AccessibilityService {
             return;
         }
         if (aPhase == A_EN_WAIT && msg.equals("PHOTO_SKIP")) {
-            aMark(Meters.PHOTO, "photo requise, saute");
+            aMark(Meters.PHOTO, SKIP_TAG + "photo requise");
             aGo(A_CLEAR, 700);
             return;
         }

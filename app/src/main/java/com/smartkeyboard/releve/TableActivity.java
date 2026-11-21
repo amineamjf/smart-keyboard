@@ -27,13 +27,14 @@ public class TableActivity extends Activity {
     private static final int REQ_EXPORT = 12;
     private static final int REQ_XLSX = 13;
     private static final int REQ_UNL = 14;
+    private static final int REQ_SKIP = 21;
     private static final int REQ_CLO = 15;
     private static final int REQ_TODO = 18;
     private static final int REQ_BKP = 19;
     private static final int REQ_RST = 20;
     private static final int REQ_LOG = 16;
     private static final int REQ_LOGF = 17;
-    private static final int F_ALL = 0, F_SENT = 1, F_ORANGE = 2, F_ERR = 3, F_NEW = 4, F_UNL = 5, F_OUT = 6, F_PHOTO = 7, F_HIGH = 8, F_NEG = 9;
+    private static final int F_ALL = 0, F_SENT = 1, F_ORANGE = 2, F_ERR = 3, F_NEW = 4, F_UNL = 5, F_OUT = 6, F_PHOTO = 7, F_HIGH = 8, F_NEG = 9, F_SKIP = 10;
 
     private final ArrayList<Meters.Row> shown = new ArrayList<>();
     private java.util.HashMap<String, Long> medians = new java.util.HashMap<>();
@@ -80,6 +81,7 @@ public class TableActivity extends Activity {
             case F_ORANGE: return r.status == Meters.EXTRA || r.status == Meters.NODATA
                     || r.status == Meters.PHOTO || r.status == Meters.SUSPECT
                     || r.status == Meters.UNKNOWN;
+            case F_SKIP: return ScanService.isSkipped(r);
             case F_ERR: return r.status == Meters.ERROR;
             case F_NEW: return r.status == Meters.NEW || r.status == Meters.SIM;
             case F_UNL: return Meters.isOffApp(r);
@@ -602,6 +604,22 @@ public class TableActivity extends Activity {
 
     private void exportXlsx() {
         createXlsx("rapport-releve", REQ_XLSX);
+    }
+
+    private void exportSkipped() {
+        if (ScanService.countSkipped() == 0) {
+            Toast.makeText(this, "Aucun compteur saut\u00E9 par l'automatique", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        createXlsx("sautes-auto", REQ_SKIP);
+    }
+
+    private void requeueSkipped() {
+        int n = ScanService.requeueSkipped();
+        ScanService.saveTable(this);
+        Toast.makeText(this, n == 0 ? "Aucun compteur saut\u00E9"
+                : n + " compteur(s) remis \u00E0 \u00AB non vu \u00BB: lancez l'envoi automatique", Toast.LENGTH_LONG).show();
+        reload();
     }
 
     private void exportUnl() {
@@ -1146,6 +1164,10 @@ public class TableActivity extends Activity {
                 "Contrat, t\u00E9l\u00E9phone, adresse lus dans l'application", this::exportTodo));
         box.addView(toolRow(d, "\u2709", "Non r\u00E9pertori\u00E9s (.xlsx)",
                 Meters.countOffApp() + " compteur(s) \u00E0 transmettre", this::exportUnl));
+        box.addView(toolRow(d, "\u26A0", "Saut\u00E9s par l'auto (.xlsx)",
+                ScanService.countSkipped() + " compteur(s) avec la raison", this::exportSkipped));
+        box.addView(toolRow(d, "\u21BB", "Retraiter les saut\u00E9s",
+                "Les remet \u00E0 \u00AB non vu \u00BB apr\u00E8s correction", this::requeueSkipped));
         box.addView(toolRow(d, "\uD83D\uDCC4", "Rapport CSV", "Format texte simple", this::exportCsv));
         box.addView(sectionTitle("Sauvegarde et partage"));
         box.addView(toolRow(d, "\uD83D\uDCBE", "Sauvegarder tout (.zip)",
@@ -1203,8 +1225,8 @@ public class TableActivity extends Activity {
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setPadding(dp(14), dp(12), dp(6), 0);
         chipNames = new String[]{"Tous", "Envoy\u00E9s", "\u00C0 v\u00E9rifier", "Erreurs", "Non vus",
-                "Hors application", "\u00C9lev\u00E9es", "N\u00E9gatifs", "\uD83D\uDCF7 Photos"};
-        chipFilters = new int[]{F_ALL, F_SENT, F_ORANGE, F_ERR, F_NEW, F_UNL, F_HIGH, F_NEG, F_PHOTO};
+                "Hors application", "\u00C9lev\u00E9es", "N\u00E9gatifs", "\uD83D\uDCF7 Photos", "\u26A0 Saut\u00E9s auto"};
+        chipFilters = new int[]{F_ALL, F_SENT, F_ORANGE, F_ERR, F_NEW, F_UNL, F_HIGH, F_NEG, F_PHOTO, F_SKIP};
         chipViews = new TextView[chipNames.length];
         for (int k = 0; k < chipNames.length; k++) {
             final int fk = chipFilters[k];
@@ -1487,7 +1509,7 @@ public class TableActivity extends Activity {
             }).start();
             return;
         }
-        if ((req != REQ_EXPORT && req != REQ_XLSX && req != REQ_UNL && req != REQ_CLO && req != REQ_TODO) || res != RESULT_OK || data == null
+        if ((req != REQ_EXPORT && req != REQ_XLSX && req != REQ_UNL && req != REQ_SKIP && req != REQ_CLO && req != REQ_TODO) || res != RESULT_OK || data == null
                 || data.getData() == null) return;
         Uri uri = data.getData();
         try (OutputStream os = getContentResolver().openOutputStream(uri)) {
@@ -1495,6 +1517,8 @@ public class TableActivity extends Activity {
                 os.write(XlsxReport.buildTodo());
             } else if (req == REQ_CLO) {
                 os.write(XlsxReport.buildClosed());
+            } else if (req == REQ_SKIP) {
+                os.write(XlsxReport.buildSkipped());
             } else if (req == REQ_UNL) {
                 os.write(XlsxReport.buildUnlisted());
             } else if (req == REQ_XLSX) {

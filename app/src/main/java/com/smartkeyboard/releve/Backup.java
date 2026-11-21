@@ -114,6 +114,8 @@ public final class Backup {
             put(z, "todo.tsv", readFile(tmp));
             put(z, "order.tsv", readFile(new File(app.getFilesDir(), "order.tsv")));
             put(z, "cfg.tsv", prefsBytes(app));
+            File vm = VoiceStore.file(app);
+            if (vm.isFile() && vm.length() > 0) put(z, "voice_model.bin", readFile(vm));
             z.finish();
         } finally {
             z.close();
@@ -171,6 +173,11 @@ public final class Backup {
         if (parts.get("todo.tsv") != null) writeAtomic(new File(dir, "todo.tsv"), parts.get("todo.tsv"));
         byte[] order = parts.get("order.tsv");
         if (order != null && order.length > 0) writeAtomic(new File(dir, "order.tsv"), order);
+        byte[] voice = parts.get("voice_model.bin");
+        if (voice != null && voice.length > 0) {
+            writeAtomic(VoiceStore.file(app), voice);
+            VoiceStore.reset();
+        }
         // reglages
         byte[] cfg = parts.get("cfg.tsv");
         int nPrefs = 0;
@@ -202,6 +209,7 @@ public final class Backup {
         Meters.loadTodo(new File(dir, "todo.tsv"));
         ScanService.reloadAfterRestore(app);
         return Meters.ROWS.size() + " compteurs, " + Meters.CLOSED.size() + " lectures de l'application, "
-                + Meters.TODO.size() + " interventions à réaliser, " + nPrefs + " réglages";
+                + Meters.TODO.size() + " interventions à réaliser, " + nPrefs + " réglages"
+                + (voice != null && voice.length > 0 ? ", modèle vocal" : "");
     }
 }

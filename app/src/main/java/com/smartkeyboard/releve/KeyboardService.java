@@ -2087,6 +2087,42 @@ public class KeyboardService extends InputMethodService {
                 Toast.makeText(this, n + " suspects rejet\u00E9s", Toast.LENGTH_SHORT).show();
                 again.run();
             });
+            pg.section("Compteurs \u00E0 sauter");
+            pg.card(OptUi.UP, ScanService.skipHigh ? OptUi.AMBER : OptUi.GREEN, "\u00C9cart hors limites",
+                    ScanService.skipHigh ? "SAUT\u00C9 (\u00E0 confirmer) \u2022 toucher"
+                            : "AUTOMATIS\u00C9 quand m\u00EAme \u2022 toucher", -1, () -> {
+                ScanService.skipHigh = !ScanService.skipHigh;
+                ScanService.saveCfg(this);
+                again.run();
+            });
+            final java.util.TreeMap<String, String> anoms = new java.util.TreeMap<>();
+            for (Meters.Row r : Meters.ROWS) {
+                if (!Meters.noAnomaly(r.anomaly) && anoms.size() < 12) anoms.put(Meters.norm(r.anomaly), r.anomaly);
+            }
+            for (final java.util.Map.Entry<String, String> e : anoms.entrySet()) {
+                final boolean sk = ScanService.SKIP_ANOMS.contains(e.getKey());
+                pg.card(OptUi.CROSS, sk ? OptUi.RED : OptUi.GREEN, e.getValue(),
+                        (sk ? "SAUT\u00C9 par l'auto" : "photo + automatis\u00E9") + " \u2022 toucher", -1, () -> {
+                    if (sk) ScanService.SKIP_ANOMS.remove(e.getKey());
+                    else ScanService.SKIP_ANOMS.add(e.getKey());
+                    ScanService.saveCfg(this);
+                    again.run();
+                });
+            }
+            final int nSk = ScanService.countSkipped();
+            pg.card(OptUi.PLAY, OptUi.AMBER, "Relancer sur les saut\u00E9s",
+                    nSk + " compteur(s) saut\u00E9(s) \u2022 apr\u00E8s correction", -1, () -> {
+                if (noSvc()) return;
+                int n = ScanService.requeueSkipped();
+                if (n == 0) {
+                    Toast.makeText(this, "Aucun compteur saut\u00E9", Toast.LENGTH_SHORT).show();
+                    again.run();
+                    return;
+                }
+                ScanService.saveTable(this);
+                setInputView(buildMain());
+                ScanService.instance.startAuto(false);
+            });
             pg.section("Limites et vitesse");
             pg.card(OptUi.UP, OptUi.AMBER, "Hausse max", "+" + ScanService.maxJump + " m\u00B3 \u2022 toucher", -1, () -> {
                 ScanService.maxJump = nextPreset(ScanService.maxJump, UP_PRESETS);

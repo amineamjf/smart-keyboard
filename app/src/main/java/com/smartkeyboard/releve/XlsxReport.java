@@ -454,6 +454,108 @@ public final class XlsxReport {
         return sb.toString();
     }
 
+    private static final String[] HEAD_SKIP = {"Tourn\u00E9e", "N\u00B0 Compteur", "Client", "Ancien index",
+            "Nouvel index", "Anomalie", "Statut", "Raison du saut"};
+    private static final double[] WIDTH_SKIP = {16, 22, 30, 14, 14, 28, 18, 60};
+
+    private static String sheetSkipped() {
+        java.util.ArrayList<Meters.Row> list = new java.util.ArrayList<>();
+        for (Meters.Row m : Meters.ROWS) if (ScanService.isSkipped(m)) list.add(m);
+        int n = list.size();
+        int lastRow = 4 + Math.max(n, 1);
+        String lastCol = colName(HEAD_SKIP.length - 1);
+        StringBuilder sb = new StringBuilder();
+        sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+        sb.append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
+        sb.append("<sheetViews><sheetView workbookViewId=\"0\" showGridLines=\"0\" tabSelected=\"1\">")
+                .append("<pane ySplit=\"4\" topLeftCell=\"A5\" activePane=\"bottomLeft\" state=\"frozen\"/>")
+                .append("<selection pane=\"bottomLeft\" activeCell=\"A5\" sqref=\"A5\"/></sheetView></sheetViews>");
+        sb.append("<sheetFormatPr defaultRowHeight=\"18\"/><cols>");
+        for (int i = 0; i < WIDTH_SKIP.length; i++) {
+            sb.append("<col min=\"").append(i + 1).append("\" max=\"").append(i + 1)
+                    .append("\" width=\"").append(WIDTH_SKIP[i]).append("\" customWidth=\"1\"/>");
+        }
+        sb.append("</cols><sheetData>");
+        String date = new SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.FRANCE).format(new Date());
+        sb.append("<row r=\"1\" ht=\"34\" customHeight=\"1\">");
+        txt(sb, 0, 1, S_TITLE, "Compteurs saut\u00E9s par l'automatique");
+        for (int c = 1; c < HEAD_SKIP.length; c++) txt(sb, c, 1, S_TITLE, "");
+        sb.append("</row>");
+        sb.append("<row r=\"2\" ht=\"20\" customHeight=\"1\">");
+        txt(sb, 0, 2, S_SUB, "G\u00E9n\u00E9r\u00E9 le " + date + "   |   " + n + " compteurs");
+        for (int c = 1; c < HEAD_SKIP.length; c++) txt(sb, c, 2, S_SUB, "");
+        sb.append("</row>");
+        sb.append("<row r=\"3\" ht=\"6\" customHeight=\"1\"/>");
+        sb.append("<row r=\"4\" ht=\"32\" customHeight=\"1\">");
+        for (int c = 0; c < HEAD_SKIP.length; c++) txt(sb, c, 4, S_HEAD, HEAD_SKIP[c]);
+        sb.append("</row>");
+        int r = 5;
+        for (int i = 0; i < n; i++, r++) {
+            Meters.Row m = list.get(i);
+            int t = (i % 2) == 1 ? S_TXT_B : S_TXT;
+            sb.append("<row r=\"").append(r).append("\" ht=\"20\" customHeight=\"1\">");
+            txt(sb, 0, r, t, Meters.tourneeOf(m));
+            txt(sb, 1, r, t, nz(m.compteur));
+            txt(sb, 2, r, t, nz(m.client));
+            txt(sb, 3, r, t, nz(m.oldIdx));
+            txt(sb, 4, r, t, nz(m.newIdx));
+            txt(sb, 5, r, t, nz(m.anomaly));
+            txt(sb, 6, r, t, Meters.statusLabel(m.status));
+            String why = nz(m.note);
+            int k = why.indexOf(ScanService.SKIP_TAG);
+            if (k >= 0) why = why.substring(k + ScanService.SKIP_TAG.length());
+            txt(sb, 7, r, t, why);
+            sb.append("</row>");
+        }
+        sb.append("</sheetData>");
+        sb.append("<autoFilter ref=\"A4:").append(lastCol).append(lastRow).append("\"/>");
+        sb.append("<mergeCells count=\"2\"><mergeCell ref=\"A1:").append(lastCol).append("1\"/><mergeCell ref=\"A2:")
+                .append(lastCol).append("2\"/></mergeCells>");
+        sb.append("<pageMargins left=\"0.4\" right=\"0.4\" top=\"0.5\" bottom=\"0.5\" header=\"0.3\" footer=\"0.3\"/>");
+        sb.append("</worksheet>");
+        return sb.toString();
+    }
+
+    public static byte[] buildSkipped() throws Exception {
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        ZipOutputStream z = new ZipOutputStream(bos);
+        put(z, "[Content_Types].xml",
+                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+                + "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">"
+                + "<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>"
+                + "<Default Extension=\"xml\" ContentType=\"application/xml\"/>"
+                + "<Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/>"
+                + "<Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>"
+                + "<Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/>"
+                + "</Types>");
+        put(z, "_rels/.rels",
+                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+                + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+                + "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/>"
+                + "</Relationships>");
+        int n = ScanService.countSkipped();
+        put(z, "xl/workbook.xml",
+                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+                + "<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" "
+                + "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">"
+                + "<bookViews><workbookView activeTab=\"0\"/></bookViews>"
+                + "<sheets><sheet name=\"Sautes\" sheetId=\"1\" r:id=\"rId1\"/></sheets>"
+                + "<definedNames><definedName name=\"_xlnm._FilterDatabase\" localSheetId=\"0\" hidden=\"1\">Sautes!$A$4:$H$"
+                + (4 + Math.max(n, 1)) + "</definedName></definedNames>"
+                + "</workbook>");
+        put(z, "xl/_rels/workbook.xml.rels",
+                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+                + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+                + "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/>"
+                + "<Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/>"
+                + "</Relationships>");
+        put(z, "xl/styles.xml", styles());
+        put(z, "xl/worksheets/sheet1.xml", sheetSkipped());
+        z.finish();
+        z.close();
+        return bos.toByteArray();
+    }
+
     private static final String[] HEAD_CLO = {"Tourn\u00E9e", "N\u00B0 Compteur", "R\u00E9f\u00E9rence",
             "Client", "Adresse", "Date / heure", "Ancien index", "Nouvel index", "Consommation",
             "Jours", "Contr\u00F4le"};

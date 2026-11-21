@@ -23,6 +23,11 @@ public final class VoiceStore {
         return model;
     }
 
+    /** Apres une restauration: oublie le modele en memoire, il sera relu depuis le fichier. */
+    public static synchronized void reset() {
+        model = null;
+    }
+
     public static File file(Context c) {
         return new File(c.getFilesDir(), "voice_model.bin");
     }
