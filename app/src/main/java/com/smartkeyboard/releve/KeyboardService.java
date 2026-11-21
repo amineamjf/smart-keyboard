@@ -797,7 +797,14 @@ public class KeyboardService extends InputMethodService {
             flashStrip("Micro non autoris\u00E9: ouvrez Outils > Voix hors ligne");
             return;
         }
-        if (frMode && VoskEngine.installed(this)) {
+        // Rien appris en darija: le francais prend le relais tout seul (ou se telecharge une seule fois)
+        final boolean untrained = VoiceStore.get(this).total() == 0;
+        if (untrained && !VoskEngine.installed(this)) {
+            startModelDownload();
+            return;
+        }
+        if (VoskEngine.installed(this) && (untrained || getSharedPreferences("cfg", Context.MODE_PRIVATE)
+                .getBoolean("voice_fr", false))) {
             flashStrip("\u2026");
             preloadVosk();
             voice.once(pcm -> {
@@ -824,8 +831,8 @@ public class KeyboardService extends InputMethodService {
 
     private CharSequence micLabel() {
         try {
-            frMode = getSharedPreferences("cfg", Context.MODE_PRIVATE).getBoolean("voice_fr", false)
-                    && VoskEngine.installed(this);
+            frMode = (getSharedPreferences("cfg", Context.MODE_PRIVATE).getBoolean("voice_fr", false)
+                    || VoiceStore.get(this).total() == 0) && VoskEngine.installed(this);
         } catch (Throwable ignored) {
         }
         android.text.SpannableString sp = new android.text.SpannableString("\uD83C\uDFA4\n" + (frMode ? "FR" : "DA"));
