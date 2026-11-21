@@ -454,6 +454,33 @@ public class KeyboardService extends InputMethodService {
         clp.leftMargin = dp(4);
         strip.addView(cCam, clp);
         cCam.setVisibility(View.GONE);
+        // bouton tout a droite (cote de la main qui tient le telephone): affiche/masque les fenetres flottantes
+        btnFloat = new TextView(this);
+        btnFloat.setText("\u25A3");
+        btnFloat.setTextSize(20);
+        btnFloat.setGravity(Gravity.CENTER);
+        btnFloat.setIncludeFontPadding(false);
+        btnFloat.setOnClickListener(v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+            boolean on = FloatCards.toggle(this);
+            if (on && ScanService.instance == null) {
+                flashStrip("Service d'accessibilit\u00E9 d\u00E9sactiv\u00E9");
+            } else {
+                flashStrip(on ? "Fen\u00EAtres : " + FloatCards.modeName(FloatCards.mode(this)) : "Fen\u00EAtres masqu\u00E9es");
+            }
+            refreshFloatBtn();
+        });
+        btnFloat.setOnLongClickListener(v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+            int m = FloatCards.cycleMode(this);
+            flashStrip("Fen\u00EAtres : " + FloatCards.modeName(m));
+            refreshFloatBtn();
+            return true;
+        });
+        LinearLayout.LayoutParams blp = lpT(mm(10), ViewGroup.LayoutParams.MATCH_PARENT, 0f);
+        blp.leftMargin = dp(4);
+        strip.addView(btnFloat, blp);
+        refreshFloatBtn();
         renderStrip();
     }
 
@@ -489,9 +516,38 @@ public class KeyboardService extends InputMethodService {
         }
     }
 
+    /** Cellule "ancien"/"nouveau" du bandeau: masquee quand la fenetre flottante correspondante est affichee. */
+    private boolean sOld() {
+        return showOld && !FloatCards.covers(FloatCards.OLD);
+    }
+
+    private boolean sNew() {
+        return showNew && !FloatCards.covers(FloatCards.NEW);
+    }
+
+    private TextView btnFloat;
+
+    /** Appele quand les fenetres flottantes apparaissent ou disparaissent. */
+    void relayoutStrip() {
+        showHandler.post(() -> {
+            renderStrip();
+            refreshFloatBtn();
+        });
+    }
+
+    private void refreshFloatBtn() {
+        try {
+            if (btnFloat == null) return;
+            boolean on = FloatCards.isOn(this);
+            btnFloat.setBackground(cellBg(on ? 0xFF2E7D32 : 0xFF455A64, 0));
+            btnFloat.setTextColor(0xFFFFFFFF);
+        } catch (Throwable ignored) {
+        }
+    }
+
     private void fitNumber() {
         float total = getResources().getDisplayMetrics().widthPixels - dp(8);
-        float avail = total - (showOld ? oldW + dp(3) : 0) - (showNew ? newW + dp(3) : 0) - dp(4);
+        float avail = total - (sOld() ? oldW + dp(3) : 0) - (sNew() ? newW + dp(3) : 0) - dp(4) - (btnFloat != null ? mm(10) + dp(4) : 0);
         float cellH = dp(STRIP_H_DP) - dp(6) - dp(3);
         float labH = tNumL.getVisibility() == View.VISIBLE ? tNumL.getTextSize() * 1.3f : 0f;
         float px = Math.max(dp(14), (cellH - labH) / 1.18f);
@@ -630,13 +686,13 @@ public class KeyboardService extends InputMethodService {
             tOldL.setVisibility(View.GONE);
             tNewL.setVisibility(View.GONE);
             tNumV.setText(dNum);
-            oldW = showOld ? sideWidth(dOld.isEmpty() ? "-" : dOld) : 0;
-            newW = showNew ? sideWidth(dNew.isEmpty() ? "-" : dNew) : 0;
+            oldW = sOld() ? sideWidth(dOld.isEmpty() ? "-" : dOld) : 0;
+            newW = sNew() ? sideWidth(dNew.isEmpty() ? "-" : dNew) : 0;
             applyWidth(cOld, oldW > 0 ? oldW : mm(9));
             applyWidth(cNew, newW > 0 ? newW : mm(9));
             fitNumber();
 
-            cOld.setVisibility(showOld ? View.VISIBLE : View.GONE);
+            cOld.setVisibility(sOld() ? View.VISIBLE : View.GONE);
             tOldL.setText("Ancien");
             cOld.setBackground(cellBg(oldFlag == 2 ? 0xFFD32F2F : oldFlag == 1 ? S_SUS_BG : S_OLD_BG, 0));
             int otc = oldFlag == 2 ? 0xFFFFFFFF : oldFlag == 1 ? S_SUS_TX : S_OLD_TX;
@@ -644,7 +700,7 @@ public class KeyboardService extends InputMethodService {
             tOldV.setText(dOld.isEmpty() ? "-" : dOld);
             fitSide(tOldV, dOld.isEmpty() ? "-" : dOld, oldW);
 
-            cNew.setVisibility(showNew ? View.VISIBLE : View.GONE);
+            cNew.setVisibility(sNew() ? View.VISIBLE : View.GONE);
             cNew.setBackground(cellBg(dSus ? S_SUS_BG : S_NEW_BG, 0));
             int tc = dSus ? S_SUS_TX : S_NEW_TX;
             tNewL.setTextColor(tc);
@@ -652,6 +708,7 @@ public class KeyboardService extends InputMethodService {
             tNewL.setText(dSus ? "Nouveau \u26A0" : "Nouveau");
             tNewV.setText(dNew.isEmpty() ? "-" : dNew);
             fitSide(tNewV, dNew.isEmpty() ? "-" : dNew, newW);
+            FloatCards.update(dOld, dNew, oldFlag, dSus);
         } catch (Throwable t) {
             // l'affichage ne doit jamais faire planter le clavier
         }

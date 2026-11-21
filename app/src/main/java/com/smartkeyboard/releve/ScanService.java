@@ -73,10 +73,19 @@ public class ScanService extends AccessibilityService {
         instance = this;
         live = false;
         ensureLoaded(this);
+        try {
+            FloatCards.reset();
+            FloatCards.refresh();
+        } catch (Throwable ignored) {
+        }
     }
 
     @Override
     public boolean onUnbind(android.content.Intent intent) {
+        try {
+            FloatCards.reset();
+        } catch (Throwable ignored) {
+        }
         instance = null;
         return super.onUnbind(intent);
     }
