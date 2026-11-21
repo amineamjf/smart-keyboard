@@ -192,7 +192,9 @@ final class SmartRvXlsx {
             boolean hasPhoto = !r.photos.isEmpty();
             sh.append("<row r=\"").append(rr).append("\" ht=\"").append(hasPhoto ? 62 : 26).append("\" customHeight=\"1\">");
             num(sh, 0, rr, sc, i + 1);
-            txt(sh, 1, rr, sc, "EAU");
+            // valeurs d'origine du fichier SmartRV importe, reprises telles quelles (aller-retour fidele)
+            String typ = Meters.colValue(r, "TYPE");
+            txt(sh, 1, rr, sc, typ.isEmpty() ? "EAU" : typ);
             txt(sh, 2, rr, sc, r.contrat);
             txt(sh, 3, rr, sc, r.compteur);
             txt(sh, 4, rr, sc, Meters.tourneeOf(r));
@@ -205,7 +207,7 @@ final class SmartRvXlsx {
             boolean ano = e.equals(S_ANO);
             txt(sh, 11, rr, ano ? st("FCA5A5", true, "7F1D1D", 10, "left", false) : sl, ano ? r.anomaly : "RAS");
             txt(sh, 12, rr, sl, r.annotation.isEmpty() ? "Aucune" : r.annotation);
-            txt(sh, 13, rr, sc, "");
+            txt(sh, 13, rr, sc, Meters.colValue(r, "DATE HEURE*"));
             if (!gps.isEmpty() && gps.split(",").length == 2) {
                 String[] g = gps.split(",");
                 String url = "https://www.google.com/maps?q=" + g[0].trim() + "," + g[1].trim();
@@ -220,8 +222,9 @@ final class SmartRvXlsx {
                     hasPhoto ? "📷 " + r.photos : "");
             txt(sh, 16, rr, added ? st("F59E0B", true, "FFFFFF", 10, "center", false) : sc,
                     added ? "🆕 AJOUTÉ" : "Non");
-            txt(sh, 17, rr, sc, "Non");
-            txt(sh, 18, rr, sc, "");
+            String reo = Meters.colValue(r, "REORDONNE*");
+            txt(sh, 17, rr, sc, reo.isEmpty() ? "Non" : reo);
+            txt(sh, 18, rr, sc, Meters.colValue(r, "SAISI*"));
             double u = Smart.usual(r);
             txt(sh, 19, rr, sc, u < 0 ? "" : String.format(java.util.Locale.FRANCE, "%.1f", u));
             sh.append("</row>");
