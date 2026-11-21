@@ -80,6 +80,27 @@ public class ScanService extends AccessibilityService {
         }
     }
 
+    /** 1 = l'application d'origine est au premier plan, 0 = une autre ecran/application, -1 = inconnu. */
+    public int originalAppFront() {
+        try {
+            java.util.List<android.view.accessibility.AccessibilityWindowInfo> ws = getWindows();
+            if (ws == null) return -1;
+            int res = -1;
+            for (android.view.accessibility.AccessibilityWindowInfo w : ws) {
+                if (w.getType() != android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION) continue;
+                if (!w.isActive() && !w.isFocused()) continue;
+                AccessibilityNodeInfo r = w.getRoot();
+                if (r == null) continue;
+                CharSequence p = r.getPackageName();
+                res = (p != null && APP.equals(p.toString())) ? 1 : 0;
+                if (res == 1) break;
+            }
+            return res;
+        } catch (Throwable t) {
+            return -1;
+        }
+    }
+
     @Override
     public boolean onUnbind(android.content.Intent intent) {
         try {

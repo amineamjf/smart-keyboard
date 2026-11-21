@@ -454,7 +454,7 @@ public class KeyboardService extends InputMethodService {
         clp.leftMargin = dp(4);
         strip.addView(cCam, clp);
         cCam.setVisibility(View.GONE);
-        // bouton tout a droite (cote de la main qui tient le telephone): affiche/masque les fenetres flottantes
+        // bouton tout a gauche du bandeau: affiche/masque les fenetres flottantes
         btnFloat = new TextView(this);
         btnFloat.setText("\u25A3");
         btnFloat.setTextSize(20);
@@ -478,8 +478,8 @@ public class KeyboardService extends InputMethodService {
             return true;
         });
         LinearLayout.LayoutParams blp = lpT(mm(10), ViewGroup.LayoutParams.MATCH_PARENT, 0f);
-        blp.leftMargin = dp(4);
-        strip.addView(btnFloat, blp);
+        blp.rightMargin = dp(4);
+        strip.addView(btnFloat, 0, blp);
         refreshFloatBtn();
         renderStrip();
     }

@@ -80,6 +80,8 @@ final class FloatCards {
     }
 
     private static boolean ticking = false;
+    /** Vrai quand un autre ecran que l'application d'origine est au premier plan (reglages, autre appli...). */
+    private static boolean awayFromApp = false;
     private static final Runnable TICK = new Runnable() {
         @Override
         public void run() {
@@ -87,7 +89,9 @@ final class FloatCards {
             try {
                 ScanService s = ScanService.instance;
                 if (s == null || !isOn(s)) return;
-                boolean busyNow = ScanService.autoRunning;
+                int front = s.originalAppFront();
+                if (front >= 0) awayFromApp = front == 0;
+                boolean busyNow = ScanService.autoRunning || awayFromApp;
                 if (busyNow != suspended) {
                     suspended = busyNow;
                     refresh();
@@ -181,21 +185,26 @@ final class FloatCards {
             final WindowManager wm = (WindowManager) s.getSystemService(Context.WINDOW_SERVICE);
             final float d = s.getResources().getDisplayMetrics().density;
             LinearLayout box = new LinearLayout(s);
-            box.setOrientation(LinearLayout.VERTICAL);
-            box.setGravity(Gravity.CENTER);
-            box.setPadding((int) (12 * d), (int) (6 * d), (int) (12 * d), (int) (6 * d));
+            box.setOrientation(LinearLayout.HORIZONTAL);
+            box.setGravity(Gravity.CENTER_VERTICAL);
+            box.setMinimumWidth((int) (170 * d));
+            box.setPadding((int) (14 * d), (int) (5 * d), (int) (14 * d), (int) (5 * d));
             TextView lab = new TextView(s);
-            lab.setTextSize(10);
-            lab.setTypeface(Typeface.DEFAULT_BOLD);
-            lab.setGravity(Gravity.CENTER);
-            lab.setText(i == OLD ? "ANCIEN" : "NOUVEAU");
+            lab.setTextSize(11);
+            lab.setTypeface(Typeface.create("sans-serif-thin", Typeface.NORMAL));
+            lab.setGravity(Gravity.CENTER_VERTICAL);
+            lab.setText(i == OLD ? "Ancien" : "Nouveau");
             TextView val = new TextView(s);
-            val.setTextSize(26);
+            val.setTextSize(30);
             val.setTypeface(Typeface.create("sans-serif-condensed", Typeface.BOLD));
-            val.setGravity(Gravity.CENTER);
+            val.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
             val.setIncludeFontPadding(false);
-            box.addView(lab);
-            box.addView(val);
+            box.addView(lab, new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+            LinearLayout.LayoutParams vlp = new LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+            vlp.leftMargin = (int) (10 * d);
+            box.addView(val, vlp);
             VIEW[i] = box;
             LAB[i] = lab;
             VAL[i] = val;
