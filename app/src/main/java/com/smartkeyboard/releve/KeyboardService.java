@@ -794,7 +794,14 @@ public class KeyboardService extends InputMethodService {
             return;
         }
         if (!voice.hasPermission()) {
-            flashStrip("Micro non autoris\u00E9: ouvrez Outils > Voix hors ligne");
+            try {
+                Intent pi = new Intent(this, MicPermissionActivity.class);
+                pi.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(pi);
+                flashStrip("Autorisez le micro, puis rappuyez sur \uD83C\uDFA4");
+            } catch (Throwable t) {
+                flashStrip("Micro non autoris\u00E9 (R\u00E9glages Android > Applications > Relev\u00E9 > Autorisations)");
+            }
             return;
         }
         // Rien appris en darija: le francais prend le relais tout seul (ou se telecharge une seule fois)

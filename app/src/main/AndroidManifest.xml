@@ -32,6 +32,12 @@
             android:exported="false" />
 
         <activity
+            android:name=".MicPermissionActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <activity
             android:name=".VoiceTrainActivity"
             android:exported="false" />
 
