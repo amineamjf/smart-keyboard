@@ -317,6 +317,8 @@ public class MainActivity extends Activity {
             ScanService.saveCfg(this);
             refresh();
         });
+        c4.addView(row("\u2728", "Alertes intelligentes", subText("Seuil propre \u00E0 chaque compteur, d'apr\u00E8s son historique"),
+                tv("\u203A", 22, GRAY, false), this::askSmart));
         c4.addView(row("\u2197", "Seuil fixe (facultatif)", subText("auto = seuil propre \u00E0 chaque compteur"), jumpVal, () -> askLimit(true)));
         c4.addView(row("\u2198", "Baisse maximale", subText("Au-del\u00E0: \u00E0 valider \u00E0 la main"), dropVal, () -> askLimit(false)));
         c4.addView(row("\uD83D\uDCF7", "Si photo demand\u00E9e", subText("Toucher pour changer"), photoVal, () -> {
@@ -396,6 +398,66 @@ public class MainActivity extends Activity {
     }
 
     /** up=true: hausse maximale acceptee; false: baisse maximale acceptee. */
+    /** Reglages des alertes intelligentes, comme dans SmartRV (valeurs saisies a la main). */
+    private void askSmart() {
+        final LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(48, 24, 48, 0);
+        final android.widget.CheckBox on = new android.widget.CheckBox(this);
+        on.setText("Alertes intelligentes activ\u00E9es");
+        on.setChecked(Smart.on);
+        box.addView(on);
+        final EditText fx = field(box, "Facteur (\u00D7 la consommation habituelle)",
+                String.valueOf(Smart.factorX10 / 10.0).replace(".0", ""), true);
+        final EditText mn = field(box, "Minimum en m\u00B3 (jamais sous ce seuil)", String.valueOf(Smart.minRise), false);
+        final EditText wn = field(box, "Derniers mois pris en compte (2 \u00E0 12)", String.valueOf(Smart.win), false);
+        final EditText mh = field(box, "Mois d'historique minimum", String.valueOf(Smart.minHist), false);
+        final EditText fixed = field(box, "Seuil fixe en m\u00B3 (0 = aucun)", String.valueOf(ScanService.maxJump), false);
+        TextView help = new TextView(this);
+        help.setText("Seuil du compteur = max(minimum, facteur \u00D7 m\u00E9diane de ses derniers mois). "
+                + "Sans assez d'historique, aucune alerte intelligente.");
+        help.setTextSize(12);
+        help.setPadding(0, 16, 0, 0);
+        box.addView(help);
+        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        sv.addView(box);
+        new AlertDialog.Builder(this)
+                .setTitle("Alertes intelligentes")
+                .setView(sv)
+                .setPositiveButton("OK", (d, w) -> {
+                    try {
+                        Smart.on = on.isChecked();
+                        double f = Double.parseDouble(fx.getText().toString().trim().replace(',', '.'));
+                        Smart.factorX10 = (int) Math.max(11, Math.min(100, Math.round(f * 10)));
+                        Smart.minRise = Math.max(0, Long.parseLong(mn.getText().toString().trim()));
+                        Smart.win = Math.max(2, Math.min(12, Integer.parseInt(wn.getText().toString().trim())));
+                        Smart.minHist = Math.max(2, Math.min(Smart.win, Integer.parseInt(mh.getText().toString().trim())));
+                        ScanService.maxJump = Math.max(0, Long.parseLong(fixed.getText().toString().trim()));
+                        ScanService.saveCfg(this);
+                    } catch (Exception e) {
+                        Toast.makeText(this, "Valeur invalide", Toast.LENGTH_SHORT).show();
+                    }
+                    refresh();
+                })
+                .setNegativeButton("Annuler", null)
+                .show();
+    }
+
+    private EditText field(LinearLayout box, String label, String value, boolean decimal) {
+        TextView t = new TextView(this);
+        t.setText(label);
+        t.setTextSize(13);
+        t.setPadding(0, 20, 0, 0);
+        box.addView(t);
+        EditText e = new EditText(this);
+        e.setInputType(decimal ? (InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL)
+                : InputType.TYPE_CLASS_NUMBER);
+        e.setText(value);
+        e.setSelectAllOnFocus(true);
+        box.addView(e);
+        return e;
+    }
+
     private void askLimit(final boolean up) {
         final EditText et = new EditText(this);
         et.setInputType(InputType.TYPE_CLASS_NUMBER);

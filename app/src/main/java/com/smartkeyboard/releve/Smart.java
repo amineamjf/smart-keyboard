@@ -15,6 +15,11 @@ final class Smart {
     static int factorX10 = 20;
     /** Hausse minimale: jamais de seuil en dessous (evite d'alerter sur 1 m3 -> 3 m3). */
     static long minRise = 8;
+    /** Alertes intelligentes actives (sinon seul le seuil fixe facultatif s'applique). */
+    static boolean on = true;
+    /** Nombre de derniers mois pris en compte pour la mediane, et historique minimal requis. */
+    static int win = 4;
+    static int minHist = 2;
 
     private static final String[] MONTHS = {"JANVIER", "FEVRIER", "MARS", "AVRIL", "MAI", "JUIN", "JUILLET",
             "AOUT", "SEPTEMBRE", "OCTOBRE", "NOVEMBRE", "DECEMBRE"};
@@ -58,8 +63,8 @@ final class Smart {
             }
             rates.add(d / gap);
         }
-        while (rates.size() > 4) rates.remove(0);
-        if (rates.size() < 2) return -1;
+        while (rates.size() > win) rates.remove(0);
+        if (rates.size() < minHist) return -1;
         Collections.sort(rates);
         int n = rates.size();
         return n % 2 == 1 ? rates.get(n / 2) : (rates.get(n / 2 - 1) + rates.get(n / 2)) / 2;
@@ -82,7 +87,7 @@ final class Smart {
     /** Plus forte hausse acceptee pour ce compteur. */
     static long limit(Meters.Row r) {
         long fixed = ScanService.maxJump > 0 ? ScanService.maxJump : Long.MAX_VALUE;
-        double u = usual(r);
+        double u = on ? usual(r) : -1;
         if (u < 0) return fixed;
         double thr = Math.max((double) minRise, u * factorX10 / 10.0);
         // alerte des que conso >= seuil  <=>  conso > ceil(seuil) - 1

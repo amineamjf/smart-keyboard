@@ -3568,6 +3568,9 @@ public class ScanService extends AccessibilityService {
             maxDrop = sp.getLong("maxDrop", 10);
             Smart.factorX10 = sp.getInt("smartX", 20);
             Smart.minRise = sp.getLong("smartMin8", 8);
+            Smart.on = sp.getBoolean("smartOn", true);
+            Smart.win = Math.max(2, Math.min(12, sp.getInt("smartWin", 4)));
+            Smart.minHist = Math.max(2, Math.min(Smart.win, sp.getInt("smartHist", 2)));
         }
         if (Meters.ROWS.isEmpty()) {
             Meters.load(new java.io.File(c.getFilesDir(), "table.tsv"));
@@ -3627,6 +3630,7 @@ public class ScanService extends AccessibilityService {
                 .putInt("photoMode", photoMode).putLong("maxJump3", maxJump)
                 .putLong("maxDrop", maxDrop).putInt("smartX", Smart.factorX10)
                 .putLong("smartMin8", Smart.minRise).putBoolean("skipHigh", skipHigh)
+                .putBoolean("smartOn", Smart.on).putInt("smartWin", Smart.win).putInt("smartHist", Smart.minHist)
                 .putString("skipAnoms", skipAnomsString()).apply();
     }
 
