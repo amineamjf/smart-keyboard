@@ -2124,8 +2124,16 @@ public class KeyboardService extends InputMethodService {
                 ScanService.instance.startAuto(false);
             });
             pg.section("Limites et vitesse");
-            pg.card(OptUi.UP, OptUi.AMBER, "Hausse max", "+" + ScanService.maxJump + " m\u00B3 \u2022 toucher", -1, () -> {
-                ScanService.maxJump = nextPreset(ScanService.maxJump, UP_PRESETS);
+            pg.card(OptUi.UP, OptUi.GREY, "Seuil fixe (facultatif)", (ScanService.maxJump > 0
+                    ? "alerte aussi au-del\u00E0 de +" + ScanService.maxJump + " m\u00B3" : "D\u00C9SACTIV\u00C9: seuil propre \u00E0 chaque compteur")
+                    + " \u2022 toucher", -1, () -> {
+                long[] fx = {0, 25, 50, 100, 200, 500};
+                long nx = fx[0];
+                for (int i = 0; i < fx.length; i++) if (fx[i] > ScanService.maxJump) {
+                    nx = fx[i];
+                    break;
+                }
+                ScanService.maxJump = nx;
                 ScanService.saveCfg(this);
                 again.run();
             });

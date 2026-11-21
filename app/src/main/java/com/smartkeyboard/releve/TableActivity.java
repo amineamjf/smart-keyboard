@@ -200,7 +200,7 @@ public class TableActivity extends Activity {
         if (chipViews == null) return;
         for (int k = 0; k < chipViews.length; k++) {
             boolean on = chipFilters[k] == filter;
-            String nmk = chipFilters[k] == F_HIGH ? chipNames[k] + " >" + ScanService.maxJump : chipNames[k];
+            String nmk = chipNames[k];
             String txt = nmk + (chipFilters[k] == F_ALL ? "" : " " + countFor(chipFilters[k]));
             chipViews[k].setText(txt);
             chipViews[k].setTextColor(on ? 0xFFFFFFFF : 0xFF475569);
@@ -255,7 +255,7 @@ public class TableActivity extends Activity {
         et.setInputType(InputType.TYPE_CLASS_NUMBER);
         et.setText(String.valueOf(ScanService.maxJump));
         new AlertDialog.Builder(this)
-                .setTitle("Consommation \u00E9lev\u00E9e : au-del\u00E0 de (m\u00B3)")
+                .setTitle("Seuil fixe facultatif en m\u00B3 (0 = seulement le seuil propre \u00E0 chaque compteur)")
                 .setView(et)
                 .setPositiveButton("OK", (d, w) -> {
                     try {

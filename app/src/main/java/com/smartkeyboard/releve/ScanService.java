@@ -3455,12 +3455,12 @@ public class ScanService extends AccessibilityService {
             java.util.Collections.synchronizedSet(new java.util.TreeSet<String>());
     public static final String SKIP_TAG = "SAUTE AUTO: ";
     public static int photoMode = 0;       // 0 = photo auto, 1 = sauter, 2 = arreter
-    public static long maxJump = 50;       // hausse maximale acceptee (nouvel - ancien)
+    public static long maxJump = 0;        // seuil FIXE facultatif (0 = desactive): le seuil intelligent par compteur est la regle
     public static long maxDrop = 10;       // baisse maximale acceptee (ancien - nouvel)
 
     /** Vrai si le nouvel index est hors de la plage [ancien - maxDrop, ancien + maxJump]. */
     public static boolean outOfRange(long o, long n) {
-        return n > o + maxJump || n < o - maxDrop;
+        return (maxJump > 0 && n > o + maxJump) || n < o - maxDrop;
     }
 
     /** Idem, mais la hausse acceptee vient de l'historique du compteur (seuil intelligent) quand il existe. */
@@ -3534,10 +3534,10 @@ public class ScanService extends AccessibilityService {
             lastSentKey = sp.getString("lastSent", "");
             loadOrder(new java.io.File(c.getFilesDir(), "order.tsv"));
             Meters.loadClosed(new java.io.File(c.getFilesDir(), "closed.tsv"));
-            maxJump = sp.getLong("maxJump2", 50);
+            maxJump = sp.getLong("maxJump3", 0);
             maxDrop = sp.getLong("maxDrop", 10);
             Smart.factorX10 = sp.getInt("smartX", 20);
-            Smart.minRise = sp.getLong("smartMin", 5);
+            Smart.minRise = sp.getLong("smartMin8", 8);
         }
         if (Meters.ROWS.isEmpty()) {
             Meters.load(new java.io.File(c.getFilesDir(), "table.tsv"));
@@ -3594,9 +3594,9 @@ public class ScanService extends AccessibilityService {
 
     public static void saveCfg(android.content.Context c) {
         c.getSharedPreferences("cfg", android.content.Context.MODE_PRIVATE).edit()
-                .putInt("photoMode", photoMode).putLong("maxJump2", maxJump)
+                .putInt("photoMode", photoMode).putLong("maxJump3", maxJump)
                 .putLong("maxDrop", maxDrop).putInt("smartX", Smart.factorX10)
-                .putLong("smartMin", Smart.minRise).putBoolean("skipHigh", skipHigh)
+                .putLong("smartMin8", Smart.minRise).putBoolean("skipHigh", skipHigh)
                 .putString("skipAnoms", skipAnomsString()).apply();
     }
 

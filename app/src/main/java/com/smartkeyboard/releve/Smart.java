@@ -6,13 +6,15 @@ import java.util.Locale;
 
 /**
  * Seuil intelligent: la consommation "habituelle" de chaque compteur vient de son propre historique mensuel
- * (colonnes "Hist <mois>" du fichier importe, ce sont des index). Sans historique, on garde la hausse max fixe.
+ * (colonnes "Hist <mois>" du fichier importe, ce sont des index), comme SmartRV: mediane des 4 dernieres
+ * consommations mensuelles, seuil = max(minimum, facteur x habituel). Sans historique (moins de 2 mois): aucune
+ * alerte intelligente; seul le seuil fixe FACULTATIF (desactive par defaut) peut s'appliquer.
  */
 final class Smart {
     /** Seuil = habituel x facteur / 10 (20 = deux fois l'habituel). */
     static int factorX10 = 20;
     /** Hausse minimale: jamais de seuil en dessous (evite d'alerter sur 1 m3 -> 3 m3). */
-    static long minRise = 5;
+    static long minRise = 8;
 
     private static final String[] MONTHS = {"JANVIER", "FEVRIER", "MARS", "AVRIL", "MAI", "JUIN", "JUILLET",
             "AOUT", "SEPTEMBRE", "OCTOBRE", "NOVEMBRE", "DECEMBRE"};
@@ -50,10 +52,13 @@ final class Smart {
             int gap = (mo.get(j) - mo.get(j - 1) + 12) % 12;
             if (gap == 0) gap = 12;
             double d = val.get(j) - val.get(j - 1);
-            if (d < 0) continue; // compteur remplace ou remise a zero
+            if (d < 0) { // compteur remplace ou remise a zero: on repart de zero apres
+                rates.clear();
+                continue;
+            }
             rates.add(d / gap);
         }
-        while (rates.size() > 6) rates.remove(0);
+        while (rates.size() > 4) rates.remove(0);
         if (rates.size() < 2) return -1;
         Collections.sort(rates);
         int n = rates.size();
@@ -62,9 +67,12 @@ final class Smart {
 
     /** Plus forte hausse acceptee pour ce compteur. */
     static long limit(Meters.Row r) {
+        long fixed = ScanService.maxJump > 0 ? ScanService.maxJump : Long.MAX_VALUE;
         double u = usual(r);
-        if (u < 0) return ScanService.maxJump;
-        return Math.max(minRise, (long) Math.ceil(u * factorX10 / 10.0));
+        if (u < 0) return fixed;
+        double thr = Math.max((double) minRise, u * factorX10 / 10.0);
+        // alerte des que conso >= seuil  <=>  conso > ceil(seuil) - 1
+        return Math.min(fixed, (long) Math.ceil(thr) - 1);
     }
 
     static boolean high(Meters.Row r, long cons) {
@@ -73,7 +81,8 @@ final class Smart {
 
     static String describe(Meters.Row r) {
         double u = usual(r);
-        if (u < 0) return "limite +" + ScanService.maxJump;
-        return String.format(Locale.FRANCE, "habituel %.1f/mois, limite +%d", u, limit(r));
+        if (u < 0) return ScanService.maxJump > 0 ? "sans historique, seuil fixe +" + ScanService.maxJump
+                : "sans historique: pas de seuil";
+        return String.format(Locale.FRANCE, "habituel %.1f/mois, alerte des +%d", u, limit(r) + 1);
     }
 }

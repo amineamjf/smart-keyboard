@@ -317,7 +317,7 @@ public class MainActivity extends Activity {
             ScanService.saveCfg(this);
             refresh();
         });
-        c4.addView(row("\u2197", "Hausse maximale", subText("Au-del\u00E0: \u00E0 valider \u00E0 la main"), jumpVal, () -> askLimit(true)));
+        c4.addView(row("\u2197", "Seuil fixe (facultatif)", subText("auto = seuil propre \u00E0 chaque compteur"), jumpVal, () -> askLimit(true)));
         c4.addView(row("\u2198", "Baisse maximale", subText("Au-del\u00E0: \u00E0 valider \u00E0 la main"), dropVal, () -> askLimit(false)));
         c4.addView(row("\uD83D\uDCF7", "Si photo demand\u00E9e", subText("Toucher pour changer"), photoVal, () -> {
             ScanService.photoMode = (ScanService.photoMode + 1) % 3;
@@ -552,7 +552,7 @@ public class MainActivity extends Activity {
         logVal.setTextColor(hasDir ? GREEN : AMBER);
         String[] pm = {"Auto", "Sauter", "Arr\u00EAter"};
         photoVal.setText(pm[ScanService.photoMode]);
-        jumpVal.setText("+" + ScanService.maxJump + " m\u00B3");
+        jumpVal.setText(ScanService.maxJump > 0 ? "+" + ScanService.maxJump + " m\u00B3" : "auto");
         dropVal.setText("\u2212" + ScanService.maxDrop + " m\u00B3");
 
         int[] c = Meters.counts();
