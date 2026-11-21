@@ -740,11 +740,7 @@ public class KeyboardService extends InputMethodService {
             flashStrip("Micro non autoris\u00E9: ouvrez Outils > Voix hors ligne");
             return;
         }
-        if (frMode) {
-            if (!VoskEngine.installed(this)) {
-                startModelDownload();
-                return;
-            }
+        if (frMode && VoskEngine.installed(this)) {
             flashStrip("\u2026");
             preloadVosk();
             voice.once(pcm -> {
@@ -771,7 +767,8 @@ public class KeyboardService extends InputMethodService {
 
     private CharSequence micLabel() {
         try {
-            frMode = getSharedPreferences("cfg", Context.MODE_PRIVATE).getBoolean("voice_fr", true);
+            frMode = getSharedPreferences("cfg", Context.MODE_PRIVATE).getBoolean("voice_fr", false)
+                    && VoskEngine.installed(this);
         } catch (Throwable ignored) {
         }
         android.text.SpannableString sp = new android.text.SpannableString("\uD83C\uDFA4\n" + (frMode ? "FR" : "DA"));
@@ -1444,17 +1441,21 @@ public class KeyboardService extends InputMethodService {
                 lp(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
         final Button micKey = makeKey(micLabel(), C_LIGHT, C_LIGHT_SH, C_TEXT, 18, () -> onMic());
         micKey.setOnLongClickListener(v -> {
-            frMode = !frMode;
+            boolean want;
             try {
-                getSharedPreferences("cfg", Context.MODE_PRIVATE).edit().putBoolean("voice_fr", frMode).apply();
+                want = !getSharedPreferences("cfg", Context.MODE_PRIVATE).getBoolean("voice_fr", false);
+                getSharedPreferences("cfg", Context.MODE_PRIVATE).edit().putBoolean("voice_fr", want).apply();
             } catch (Throwable ignored) {
+                want = false;
+            }
+            if (want && !VoskEngine.installed(this)) {
+                // le fran\u00E7ais n'est activ\u00E9 qu'apr\u00E8s le t\u00E9l\u00E9chargement; en attendant, la voix apprise (DA) reste active
+                startModelDownload();
+            } else {
+                flashStrip(want ? "Voix : FRAN\u00C7AIS (nombres et ordres)" : "Voix : DARIJA (appris)");
+                if (want) preloadVosk();
             }
             micKey.setText(micLabel());
-            flashStrip(frMode ? "Voix : FRAN\u00C7AIS (nombres et ordres)" : "Voix : DARIJA (appris)");
-            if (frMode) {
-                if (VoskEngine.installed(this)) preloadVosk();
-                else startModelDownload();
-            }
             return true;
         });
         mid.addView(micKey, lp(0, ViewGroup.LayoutParams.MATCH_PARENT, 0.6f));
@@ -2360,7 +2361,7 @@ public class KeyboardService extends InputMethodService {
     public void onStartInputView(EditorInfo info, boolean restarting) {
         super.onStartInputView(info, restarting);
         try {
-            if (getSharedPreferences("cfg", Context.MODE_PRIVATE).getBoolean("voice_fr", true)
+            if (getSharedPreferences("cfg", Context.MODE_PRIVATE).getBoolean("voice_fr", false)
                     && VoskEngine.installed(this)) preloadVosk();
         } catch (Throwable ignored) {
         }
