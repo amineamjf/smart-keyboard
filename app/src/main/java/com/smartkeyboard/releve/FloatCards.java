@@ -187,8 +187,7 @@ final class FloatCards {
             LinearLayout box = new LinearLayout(s);
             box.setOrientation(LinearLayout.HORIZONTAL);
             box.setGravity(Gravity.CENTER_VERTICAL);
-            box.setMinimumWidth((int) (170 * d));
-            box.setPadding((int) (14 * d), (int) (5 * d), (int) (14 * d), (int) (5 * d));
+            box.setPadding((int) (10 * d), (int) (4 * d), (int) (10 * d), (int) (4 * d));
             TextView lab = new TextView(s);
             lab.setTextSize(11);
             lab.setTypeface(Typeface.create("sans-serif-thin", Typeface.NORMAL));
@@ -197,13 +196,13 @@ final class FloatCards {
             TextView val = new TextView(s);
             val.setTextSize(30);
             val.setTypeface(Typeface.create("sans-serif-condensed", Typeface.BOLD));
-            val.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+            val.setGravity(Gravity.CENTER);
             val.setIncludeFontPadding(false);
             box.addView(lab, new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
             LinearLayout.LayoutParams vlp = new LinearLayout.LayoutParams(
-                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-            vlp.leftMargin = (int) (10 * d);
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            vlp.leftMargin = (int) (8 * d);
             box.addView(val, vlp);
             VIEW[i] = box;
             LAB[i] = lab;
