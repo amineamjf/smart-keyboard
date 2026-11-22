@@ -621,17 +621,21 @@ public final class Meters {
     /** Remplace le tableau par le contenu des feuilles. Retourne le nombre de lignes. */
     public static int importSheets(List<List<String[]>> sheets) throws Exception {
         lastWasClosed = false;
+        // passe 0: feuille qui porte les colonnes d'index (le releve SmartRV); passe 1: ancien comportement
+        for (int pass = 0; pass < 2; pass++)
         for (List<String[]> rows : sheets) {
             for (int h = 0; h < rows.size() && h < 30; h++) {
                 String[] head = rows.get(h);
-                int cCompteur = colOf(head, "N COMPTEUR", "COMPTEUR", "NUM COMPTEUR");
+                int cCompteur = colOf(head, "N COMPTEUR", "COMPTEUR", "NUM COMPTEUR", "N COMPTEUR*", "NUMERO COMPTEUR*", "NUM COMPTEUR*");
                 if (cCompteur < 0) continue;
                 int cNew = colOf(head, "NOUVEL INDEX*", "NOUVEAU INDEX*", "INDEX NOUVEAU*",
                         "INDEX NOUVEL*", "INDEX ACTUEL*", "INDEX RELEVE*", "NEW INDEX*", "NOUV INDEX*");
                 int cOld = colOf(head, "ANCIEN INDEX*", "INDEX ANCIEN*", "ANC INDEX*",
                         "INDEX PRECEDENT*", "DERNIER INDEX*", "OLD INDEX*", "PREV INDEX*",
                         "ENCIEN INDEX*", "ANSIEN INDEX*", "ANCIN INDEX*", "ANCIAN INDEX*");
-                if (colOf(head, "TELEPHONE*") >= 0 && colOf(head, "STATUT") < 0 && colOf(head, "CONTROLE") < 0) {
+                if (pass == 0 && cOld < 0 && cNew < 0) continue;
+                // un releve SmartRV contient aussi "Telephone": avec des colonnes d'index ce n'est PAS la liste a realiser
+                if (cOld < 0 && cNew < 0 && colOf(head, "TELEPHONE*") >= 0 && colOf(head, "STATUT") < 0 && colOf(head, "CONTROLE") < 0) {
                     return importTodoSheet(rows, h, head, cCompteur);
                 }
                 if (colOf(head, "CONTROLE") >= 0 && colOf(head, "JOURS") >= 0
