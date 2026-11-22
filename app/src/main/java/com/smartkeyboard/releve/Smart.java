@@ -42,18 +42,40 @@ final class Smart {
         return n % 2 == 1 ? s.get(n / 2) : (s.get(n / 2 - 1) + s.get(n / 2)) / 2;
     }
 
+    private static String[] cacheSrc;
+    private static int[] cacheCols = new int[0];
+
+    /** Colonnes d'historique (paires colonne, mois), calculees une seule fois par en-tete: "Hist Juillet" ou "Juillet". */
+    private static synchronized int[] histCols(String[] h) {
+        if (cacheSrc == h) return cacheCols;
+        ArrayList<Integer> l = new ArrayList<>();
+        for (int i = 0; i < h.length; i++) {
+            String k = Meters.norm(h[i]);
+            if (k.startsWith("HIST ")) k = k.substring(5);
+            int m = monthOf(k);
+            if (m < 0) continue;
+            l.add(i);
+            l.add(m);
+        }
+        int[] a = new int[l.size()];
+        for (int i = 0; i < a.length; i++) a[i] = l.get(i);
+        cacheCols = a;
+        cacheSrc = h;
+        return a;
+    }
+
     /** Derniers mois de consommation (ordre chronologique), ou null si l'historique est insuffisant. */
     static ArrayList<Double> rates(Meters.Row r) {
         String[] h = Meters.HEADS;
         String[] c = r == null ? null : r.cols;
         if (h == null || c == null) return null;
+        int[] hc = histCols(h);
+        if (hc.length < 4) return null;
         ArrayList<Integer> mo = new ArrayList<>();
         ArrayList<Double> val = new ArrayList<>();
-        for (int i = 0; i < h.length && i < c.length; i++) {
-            String k = Meters.norm(h[i]);
-            if (!k.startsWith("HIST ")) continue;
-            int m = monthOf(k.substring(5));
-            if (m < 0 || c[i] == null) continue;
+        for (int q = 0; q + 1 < hc.length; q += 2) {
+            int i = hc[q], m = hc[q + 1];
+            if (i >= c.length || c[i] == null) continue;
             String v = c[i].trim().replace(',', '.');
             if (v.isEmpty()) continue;
             try {

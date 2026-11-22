@@ -67,9 +67,15 @@ public class TableActivity extends Activity {
         return passFilter(r, filter);
     }
 
+    private static boolean isN(String s) {
+        if (s == null || s.isEmpty() || s.length() > 9) return false;
+        for (int i = 0; i < s.length(); i++) if (s.charAt(i) < '0' || s.charAt(i) > '9') return false;
+        return true;
+    }
+
     /** Consommation (nouveau - ancien) si les deux index sont des nombres, sinon Long.MIN_VALUE. */
     private static long consOf(Meters.Row r) {
-        if (r.oldIdx.matches("\\d{1,9}") && r.newIdx.matches("\\d{1,9}")) {
+        if (isN(r.oldIdx) && isN(r.newIdx)) {
             return Long.parseLong(r.newIdx) - Long.parseLong(r.oldIdx);
         }
         return Long.MIN_VALUE;
@@ -95,7 +101,7 @@ public class TableActivity extends Activity {
                 return cs != Long.MIN_VALUE && cs < 0;
             }
             case F_OUT:
-                return r.oldIdx.matches("\\d{1,9}") && r.newIdx.matches("\\d{1,9}")
+                return isN(r.oldIdx) && isN(r.newIdx)
                         && ScanService.outOfRange(r, Long.parseLong(r.oldIdx), Long.parseLong(r.newIdx));
             default: return true;
         }
@@ -288,7 +294,7 @@ public class TableActivity extends Activity {
             info.append("\n\u26A0 L'application a un autre nouvel index : ").append(c.idx)
                     .append(". Aucune proposition automatique.\n");
         }
-        if (same && c.note.startsWith("consommation lue") && c.conso.matches("\\d{1,9}") && r.newIdx.matches("\\d{1,9}")) {
+        if (same && c.note.startsWith("consommation lue") && c.conso.matches("\\d{1,9}") && isN(r.newIdx)) {
             long implied = Long.parseLong(r.newIdx) - Long.parseLong(c.conso);
             info.append("Consommation de l'application : ").append(c.conso).append("\n");
             if (implied >= 0) {
@@ -401,7 +407,7 @@ public class TableActivity extends Activity {
         final long csv = consOf(r);
         final boolean isNeg = csv != Long.MIN_VALUE && csv < 0;
         final boolean isHigh = csv != Long.MIN_VALUE && Smart.high(r, csv);
-        final boolean isStop = csv == 0 && r.oldIdx.matches("\\d{1,9}") && r.newIdx.matches("\\d{1,9}");
+        final boolean isStop = csv == 0 && isN(r.oldIdx) && isN(r.newIdx);
         int fillC = C_OK, lineC = C_OK_L;
         if (isNeg) {
             fillC = C_NEG;
@@ -426,7 +432,7 @@ public class TableActivity extends Activity {
         card.setBackground(cardShape(fillC, lineC, 20));
         card.setPadding(dp(14), dp(12), dp(14), dp(12));
 
-        boolean on = r.oldIdx.matches("\\d{1,9}"), nn = r.newIdx.matches("\\d{1,9}");
+        boolean on = isN(r.oldIdx), nn = isN(r.newIdx);
         int vd = Verdict.judge(r, medians, ScanService.maxJump, ScanService.maxDrop);
         long cons = on && nn ? Long.parseLong(r.newIdx) - Long.parseLong(r.oldIdx) : 0;
         Long md = medians.get(Meters.tourneeOf(r));
