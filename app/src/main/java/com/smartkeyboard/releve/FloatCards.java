@@ -35,6 +35,33 @@ final class FloatCards {
     private static String tOld = "", tNew = "", tExp = "";
     private static int flagOld = 0;
     private static boolean sus = false;
+    /** Echelle choisie au pincement (0,6 a 2,2), commune aux trois fenetres. */
+    private static float scale = -1f;
+    private static final float S_MIN = 0.6f, S_MAX = 2.2f;
+
+    private static float scaleOf(Context c) {
+        if (scale < 0) {
+            try {
+                scale = prefs(c).getFloat("fc_scale", 1f);
+            } catch (Throwable t) {
+                scale = 1f;
+            }
+            scale = Math.max(S_MIN, Math.min(S_MAX, scale));
+        }
+        return scale;
+    }
+
+    private static void applyScale(Context c) {
+        float sc = scaleOf(c);
+        float d = c.getResources().getDisplayMetrics().density;
+        for (int i = 0; i < 3; i++) {
+            if (VIEW[i] == null) continue;
+            LAB[i].setTextSize(9 * sc);
+            VAL[i].setTextSize(20 * sc);
+            VIEW[i].setPadding((int) (7 * d * sc), (int) (3 * d * sc), (int) (8 * d * sc), (int) (3 * d * sc));
+            VIEW[i].requestLayout();
+        }
+    }
 
     private FloatCards() {
     }
@@ -197,14 +224,14 @@ final class FloatCards {
             LinearLayout box = new LinearLayout(s);
             box.setOrientation(LinearLayout.HORIZONTAL);
             box.setGravity(Gravity.CENTER_VERTICAL);
-            box.setPadding((int) (10 * d), (int) (4 * d), (int) (10 * d), (int) (4 * d));
             TextView lab = new TextView(s);
-            lab.setTextSize(11);
-            lab.setTypeface(Typeface.create("sans-serif-thin", Typeface.NORMAL));
-            lab.setGravity(Gravity.CENTER_VERTICAL);
-            lab.setText(i == OLD ? "Ancien" : (i == NEW ? "Nouveau" : "Attendu"));
+            lab.setTypeface(Typeface.create("sans-serif-medium", Typeface.BOLD));
+            lab.setLetterSpacing(0.06f);
+            lab.setGravity(Gravity.CENTER);
+            lab.setIncludeFontPadding(false);
+            lab.setText(i == OLD ? "old" : (i == NEW ? "new" : "exp"));
+            lab.setPadding((int) (5 * d), (int) (1 * d), (int) (5 * d), (int) (1 * d));
             TextView val = new TextView(s);
-            val.setTextSize(30);
             val.setTypeface(Typeface.create("sans-serif-condensed", Typeface.BOLD));
             val.setGravity(Gravity.CENTER);
             val.setIncludeFontPadding(false);
@@ -212,7 +239,7 @@ final class FloatCards {
                     LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
             LinearLayout.LayoutParams vlp = new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-            vlp.leftMargin = (int) (8 * d);
+            vlp.leftMargin = (int) (6 * d);
             box.addView(val, vlp);
             VIEW[i] = box;
             LAB[i] = lab;
@@ -228,19 +255,50 @@ final class FloatCards {
                     PixelFormat.TRANSLUCENT);
             lp.gravity = Gravity.TOP | Gravity.START;
             SharedPreferences p = prefs(s);
-            lp.x = p.getInt("fc_x" + i, (int) (10 * d));
-            lp.y = p.getInt("fc_y" + i, (int) ((i == OLD ? 110 : (i == NEW ? 190 : 270)) * d));
+            lp.x = p.getInt("fc_x" + i, (int) ((8 + i * 92) * d));
+            lp.y = p.getInt("fc_y" + i, (int) (70 * d));
             lp.x = Math.max(0, Math.min(lp.x, dm.widthPixels - (int) (60 * d)));
             lp.y = Math.max(0, Math.min(lp.y, dm.heightPixels - (int) (60 * d)));
             LP[i] = lp;
+            applyScale(s);
 
+            final android.view.ScaleGestureDetector sg = new android.view.ScaleGestureDetector(s,
+                    new android.view.ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                        @Override
+                        public boolean onScale(android.view.ScaleGestureDetector det) {
+                            scale = Math.max(S_MIN, Math.min(S_MAX, scaleOf(s) * det.getScaleFactor()));
+                            applyScale(s);
+                            return true;
+                        }
+
+                        @Override
+                        public void onScaleEnd(android.view.ScaleGestureDetector det) {
+                            try {
+                                prefs(s).edit().putFloat("fc_scale", scale).apply();
+                            } catch (Throwable ignored) {
+                            }
+                        }
+                    });
             box.setOnTouchListener(new View.OnTouchListener() {
                 float rx, ry;
                 int sx, sy;
+                boolean rebase = false;
 
                 @Override
                 public boolean onTouch(View v, MotionEvent e) {
                     try {
+                        sg.onTouchEvent(e);
+                        if (e.getPointerCount() > 1 || sg.isInProgress()) {
+                            rebase = true;
+                            return true;
+                        }
+                        if (rebase && e.getActionMasked() == MotionEvent.ACTION_MOVE) {
+                            rx = e.getRawX();
+                            ry = e.getRawY();
+                            sx = lp.x;
+                            sy = lp.y;
+                            rebase = false;
+                        }
                         switch (e.getActionMasked()) {
                             case MotionEvent.ACTION_DOWN:
                                 rx = e.getRawX();
@@ -311,12 +369,17 @@ final class FloatCards {
                     bg = 0xFFD9F5E3;
                     tx = 0xFF0B5A2B;
                 }
+                float dn = VIEW[i].getResources().getDisplayMetrics().density;
                 GradientDrawable g = new GradientDrawable();
                 g.setColor(bg);
-                g.setCornerRadius(VIEW[i].getResources().getDisplayMetrics().density * 14);
-                g.setStroke((int) (VIEW[i].getResources().getDisplayMetrics().density * 1.5f), 0x55000000);
+                g.setCornerRadius(dn * 12);
+                g.setStroke((int) Math.max(1, dn), 0x22000000);
                 VIEW[i].setBackground(g);
                 VIEW[i].setAlpha(0.96f);
+                GradientDrawable pill = new GradientDrawable();
+                pill.setColor((tx & 0x00FFFFFF) | 0x26000000);
+                pill.setCornerRadius(dn * 6);
+                LAB[i].setBackground(pill);
                 LAB[i].setTextColor(tx);
                 VAL[i].setTextColor(tx);
                 VAL[i].setText(t.isEmpty() ? "-" : t);

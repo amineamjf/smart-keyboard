@@ -456,8 +456,8 @@ public class KeyboardService extends InputMethodService {
         cCam.setVisibility(View.GONE);
         // bouton tout a gauche du bandeau: affiche/masque les fenetres flottantes
         btnFloat = new TextView(this);
-        btnFloat.setText("\u25A3");
-        btnFloat.setTextSize(20);
+        btnFloat.setText("");
+        btnFloat.setTextSize(10);
         btnFloat.setGravity(Gravity.CENTER);
         btnFloat.setIncludeFontPadding(false);
         btnFloat.setOnClickListener(v -> {
@@ -477,8 +477,8 @@ public class KeyboardService extends InputMethodService {
             refreshFloatBtn();
             return true;
         });
-        LinearLayout.LayoutParams blp = lpT(mm(10), ViewGroup.LayoutParams.MATCH_PARENT, 0f);
-        blp.rightMargin = dp(4);
+        LinearLayout.LayoutParams blp = lpT(mm(3), ViewGroup.LayoutParams.MATCH_PARENT, 0f);
+        blp.rightMargin = dp(3);
         strip.addView(btnFloat, 0, blp);
         refreshFloatBtn();
         renderStrip();
@@ -547,7 +547,7 @@ public class KeyboardService extends InputMethodService {
 
     private void fitNumber() {
         float total = getResources().getDisplayMetrics().widthPixels - dp(8);
-        float avail = total - (sOld() ? oldW + dp(3) : 0) - (sNew() ? newW + dp(3) : 0) - dp(4) - (btnFloat != null ? mm(10) + dp(4) : 0);
+        float avail = total - (sOld() ? oldW + dp(3) : 0) - (sNew() ? newW + dp(3) : 0) - dp(4) - (btnFloat != null ? mm(3) + dp(3) : 0);
         float cellH = dp(STRIP_H_DP) - dp(6) - dp(3);
         float labH = tNumL.getVisibility() == View.VISIBLE ? tNumL.getTextSize() * 1.3f : 0f;
         float px = Math.max(dp(14), (cellH - labH) / 1.18f);
