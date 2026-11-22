@@ -41,13 +41,20 @@ public class AddMeterActivity extends Activity {
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(32, 24, 32, 24);
+        root.setBackgroundColor(0xFFF4F6FB);
 
         TextView title = new TextView(this);
         title.setText("Ajouter un compteur");
-        title.setTextSize(18);
-        title.setPadding(0, 0, 0, 12);
+        title.setTextSize(19);
+        title.setTextColor(0xFFFFFFFF);
+        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        title.setBackgroundColor(0xFF1E3A8A);
+        title.setPadding(dp(18), dp(34), dp(18), dp(14));
         root.addView(title);
+        final LinearLayout form = new LinearLayout(this);
+        form.setOrientation(LinearLayout.VERTICAL);
+        form.setPadding(dp(16), dp(14), dp(16), dp(14));
+        root.addView(form);
 
         etSearch = new EditText(this);
         etSearch.setHint("N° compteur, contrat ou nom du client");
@@ -67,13 +74,13 @@ public class AddMeterActivity extends Activity {
                 h.postDelayed(doSearch, 350);
             }
         });
-        root.addView(etSearch);
+        form.addView(etSearch);
 
         info = new TextView(this);
         info.setTextSize(15);
         info.setPadding(0, 12, 0, 12);
         info.setText("Tapez le numéro: s'il est dans le tableau, ses informations s'affichent.");
-        root.addView(info);
+        form.addView(info);
 
         next = new Button(this);
         next.setText("Suivant ›");
@@ -83,19 +90,19 @@ public class AddMeterActivity extends Activity {
             cur = (cur + 1) % found.size();
             showCurrent();
         });
-        root.addView(next);
+        form.addView(next);
 
         etTournee = new EditText(this);
         etTournee.setHint("Tournée");
         etTournee.setInputType(InputType.TYPE_CLASS_TEXT);
         String t = getIntent().getStringExtra("tournee");
         etTournee.setText(t == null ? "" : t);
-        root.addView(etTournee);
+        form.addView(etTournee);
 
         etIdx = new EditText(this);
         etIdx.setHint("Nouvel index");
         etIdx.setInputType(InputType.TYPE_CLASS_NUMBER);
-        root.addView(etIdx);
+        form.addView(etIdx);
 
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
@@ -108,10 +115,42 @@ public class AddMeterActivity extends Activity {
         save.setOnClickListener(v -> save());
         row.addView(cancel, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         row.addView(save, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        root.addView(row);
+        form.addView(row);
 
+        styleButtons(cancel, save);
         setContentView(root);
         etSearch.requestFocus();
+    }
+
+    private int dp(int v) {
+        return (int) (v * getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    private void styleButtons(Button cancel, Button save) {
+        info.setBackground(card());
+        info.setPadding(dp(14), dp(12), dp(14), dp(12));
+        info.setTextColor(0xFF0F1E4A);
+        paint(save, 0xFF1D4ED8, 0xFFFFFFFF);
+        paint(cancel, 0xFFE2E8F5, 0xFF0F1E4A);
+        paint(next, 0xFFEAF0FF, 0xFF1D4ED8);
+    }
+
+    private android.graphics.drawable.GradientDrawable card() {
+        android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
+        g.setColor(0xFFFFFFFF);
+        g.setCornerRadius(dp(16));
+        g.setStroke(dp(1), 0xFFE6EAF2);
+        return g;
+    }
+
+    private void paint(Button b, int bg, int fg) {
+        android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
+        g.setColor(bg);
+        g.setCornerRadius(dp(14));
+        b.setBackground(g);
+        b.setTextColor(fg);
+        b.setAllCaps(false);
+        b.setStateListAnimator(null);
     }
 
     private void search() {

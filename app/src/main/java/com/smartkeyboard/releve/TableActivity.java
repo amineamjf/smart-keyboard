@@ -1212,12 +1212,12 @@ public class TableActivity extends Activity {
         LinearLayout top = new LinearLayout(this);
         top.setOrientation(LinearLayout.HORIZONTAL);
         top.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        top.setBackgroundColor(0xFFF4F6FB);
-        top.setPadding(dp(18), dp(30), dp(12), dp(8));
+        top.setBackgroundColor(0xFF1E3A8A);
+        top.setPadding(dp(18), dp(30), dp(12), dp(12));
         LinearLayout tt = new LinearLayout(this);
         tt.setOrientation(LinearLayout.VERTICAL);
-        tt.addView(label("Tableau", 28, 0xFF0F172A, true));
-        head = label("", 13, 0xFF64748B, false);
+        tt.addView(label("Tableau", 22, 0xFFFFFFFF, true));
+        head = label("", 13, 0xCCFFFFFF, false);
         tt.addView(head);
         top.addView(tt, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         top.addView(headBtn("Tourn\u00E9es", this::pickTournees));
