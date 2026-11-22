@@ -730,7 +730,7 @@ public class TableActivity extends Activity {
     private void shareReport() {
         shareBuilt("rapport-releve-" + today() + ".xlsx",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                () -> SmartRvXlsx.build());
+                () -> SmartRvReport.build());
     }
 
     private void exportTodo() {
@@ -1522,7 +1522,7 @@ public class TableActivity extends Activity {
             } else if (req == REQ_UNL) {
                 os.write(XlsxReport.buildUnlisted());
             } else if (req == REQ_XLSX) {
-                os.write(SmartRvXlsx.build());
+                os.write(SmartRvReport.build());
             } else {
                 os.write(Meters.csv().getBytes("UTF-8"));
             }

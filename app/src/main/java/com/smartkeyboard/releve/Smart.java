@@ -34,9 +34,19 @@ final class Smart {
 
     /** Consommation mensuelle habituelle (mediane des derniers mois), ou -1 si l'historique est insuffisant. */
     static double usual(Meters.Row r) {
+        ArrayList<Double> rates = rates(r);
+        if (rates == null) return -1;
+        ArrayList<Double> s = new ArrayList<>(rates);
+        Collections.sort(s);
+        int n = s.size();
+        return n % 2 == 1 ? s.get(n / 2) : (s.get(n / 2 - 1) + s.get(n / 2)) / 2;
+    }
+
+    /** Derniers mois de consommation (ordre chronologique), ou null si l'historique est insuffisant. */
+    static ArrayList<Double> rates(Meters.Row r) {
         String[] h = Meters.HEADS;
         String[] c = r == null ? null : r.cols;
-        if (h == null || c == null) return -1;
+        if (h == null || c == null) return null;
         ArrayList<Integer> mo = new ArrayList<>();
         ArrayList<Double> val = new ArrayList<>();
         for (int i = 0; i < h.length && i < c.length; i++) {
@@ -64,10 +74,8 @@ final class Smart {
             rates.add(d / gap);
         }
         while (rates.size() > win) rates.remove(0);
-        if (rates.size() < minHist) return -1;
-        Collections.sort(rates);
-        int n = rates.size();
-        return n % 2 == 1 ? rates.get(n / 2) : (rates.get(n / 2 - 1) + rates.get(n / 2)) / 2;
+        if (rates.size() < minHist) return null;
+        return rates;
     }
 
     /** Index attendu comme SmartRV: ancien index + consommation habituelle; -1 si pas assez d'historique. */

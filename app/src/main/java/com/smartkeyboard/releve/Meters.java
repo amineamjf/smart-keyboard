@@ -39,6 +39,9 @@ public final class Meters {
         public String annotation = "";
         public String note = "";
         public int status = NEW;
+        boolean status_isNew() {
+            return status == NEW;
+        }
         public boolean extra = false;
         public String[] cols = new String[0]; // cellules d'origine du fichier importe
         public String warn = "";             // ex: compteur different du tableau (remplace)
@@ -46,6 +49,7 @@ public final class Meters {
         public String added = "";            // date d'ajout (compteurs non repertories)
         public String photos = "";           // noms des copies de photos (Pictures/Releve)
         public String address = "";          // adresse lue sur l'ecran de l'application d'origine
+        public String readAt = "";           // date/heure de saisie du nouvel index ("?" = anterieur a cette version)
     }
 
     /** En-tetes du fichier importe (pour retrouver nom, adresse, contrat...). */
@@ -707,6 +711,29 @@ public final class Meters {
                     tmpRows.add(u);
                     tmpMap.put(u.key, u);
                 }
+                // un nouvel import ne doit pas effacer les releves deja saisis: meme compteur (contrat d'abord) ET meme
+                // ancien index => meme periode, on reporte le resultat. Un autre ancien index = nouveau mois: rien n'est reporte.
+                HashMap<String, Row> prevByContract = new HashMap<>();
+                for (Row o : ROWS) if (!o.contrat.trim().isEmpty()) prevByContract.put(o.contrat.trim(), o);
+                int kept = 0;
+                for (Row nr : tmpRows) {
+                    if (nr.status == UNLISTED) continue;
+                    Row o = nr.contrat.trim().isEmpty() ? null : prevByContract.get(nr.contrat.trim());
+                    if (o == null) o = MAP.get(nr.key);
+                    if (o == null || o.status == UNLISTED) continue;
+                    boolean had = !o.newIdx.isEmpty() || o.status != NEW;
+                    if (!had || !nr.newIdx.isEmpty() || !nr.status_isNew()) continue;
+                    if (!o.oldIdx.trim().equals(nr.oldIdx.trim())) continue;
+                    nr.newIdx = o.newIdx;
+                    nr.status = o.status;
+                    nr.note = o.note;
+                    nr.photos = o.photos;
+                    nr.readAt = o.readAt;
+                    if (noAnomaly(nr.anomaly)) nr.anomaly = o.anomaly;
+                    if (noAnnotation(nr.annotation)) nr.annotation = o.annotation;
+                    kept++;
+                }
+                if (kept > 0) lastReport = lastReport + "\n" + kept + " relevé(s) déjà saisi(s) conservé(s) (même contrat, même ancien index)";
                 ROWS.clear();
                 MAP.clear();
                 ROWS.addAll(tmpRows);
@@ -743,13 +770,20 @@ public final class Meters {
         try (Writer w = new java.io.BufferedWriter(new OutputStreamWriter(new FileOutputStream(tmp), "UTF-8"), 65536)) {
             w.write("#H\t" + joinCells(HEADS) + "\n");
             w.write("#T\t" + clean(lastTournee) + "\n");
+            String stamp = new java.text.SimpleDateFormat("dd/MM/yyyy HH:mm:ss", java.util.Locale.FRANCE)
+                    .format(new java.util.Date());
             for (Row r : ROWS) {
+                if (r.newIdx == null || r.newIdx.isEmpty()) r.readAt = "";
+                else if (r.readAt == null || r.readAt.isEmpty()) {
+                    // un nouvel index vient d'etre saisi (ou importe avec sa propre date): on date la saisie
+                    r.readAt = colValue(r, "DATE HEURE*").isEmpty() ? stamp : "?";
+                }
                 w.write(clean(r.compteur) + "\t" + clean(r.client) + "\t" + clean(r.contrat) + "\t"
                         + clean(r.oldIdx) + "\t" + clean(r.newIdx) + "\t" + clean(r.anomaly) + "\t"
                         + clean(r.annotation) + "\t" + r.status + "\t" + clean(r.note) + "\t"
                         + (r.extra ? "1" : "0") + "\t" + joinCells(r.cols) + "\t" + clean(r.warn) + "\t"
                         + clean(r.tournee) + "\t" + clean(r.added) + "\t" + clean(r.photos) + "\t"
-                        + clean(r.address) + "\n");
+                        + clean(r.address) + "\t" + clean(r.readAt) + "\n");
             }
             w.flush();
             w.close();
@@ -806,6 +840,8 @@ public final class Meters {
                 if (p.length > 13) r.added = p[13];
                 if (p.length > 14) r.photos = p[14];
                 if (p.length > 15) r.address = p[15];
+                if (p.length > 16) r.readAt = p[16];
+                else if (!r.newIdx.isEmpty()) r.readAt = "?"; // ancien fichier: heure inconnue, on n'invente rien
                 tmpRows.add(r);
                 tmpMap.put(r.key, r);
             }

@@ -492,7 +492,7 @@ public class MainActivity extends Activity {
         } else {
             new AlertDialog.Builder(this)
                     .setTitle("Remplacer le tableau actuel ?")
-                    .setMessage(Meters.ROWS.size() + " lignes et leurs statuts seront remplaces.")
+                    .setMessage(Meters.ROWS.size() + " lignes seront remplacees. Les releves deja saisis des memes compteurs (meme contrat, meme ancien index) sont conserves.")
                     .setPositiveButton("Remplacer", (d, w) -> go.run())
                     .setNegativeButton("Annuler", null)
                     .show();
