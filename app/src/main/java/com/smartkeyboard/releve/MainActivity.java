@@ -200,6 +200,12 @@ public class MainActivity extends Activity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(PAGE);
+        pg = new LinearLayout[5];
+        for (int i = 0; i < pg.length; i++) {
+            pg[i] = new LinearLayout(this);
+            pg[i].setOrientation(LinearLayout.VERTICAL);
+            pg[i].setPadding(0, 0, 0, dp(24));
+        }
 
         // en-tete: carte de progression en degrade
         LinearLayout top = new LinearLayout(this);
@@ -234,7 +240,8 @@ public class MainActivity extends Activity {
         top.addView(chips);
         LinearLayout.LayoutParams topLp = lp(-1, -2, 0);
         topLp.setMargins(dp(14), dp(34), dp(14), 0);
-        root.addView(top, topLp);
+        pg[0].addView(top, topLp);
+        topLp.topMargin = dp(10);
 
         // actions rapides
         LinearLayout quick = new LinearLayout(this);
@@ -254,7 +261,7 @@ public class MainActivity extends Activity {
         }
         LinearLayout.LayoutParams qLp = lp(-1, -2, 12);
         qLp.setMargins(dp(14), dp(12), dp(14), 0);
-        root.addView(quick, qLp);
+        pg[0].addView(quick, qLp);
 
         // demarrage
         LinearLayout c1 = card("D\u00E9marrage");
@@ -269,7 +276,7 @@ public class MainActivity extends Activity {
         c1.addView(pill("Importer un nouveau tableau", PALE, BLUE, this::pickFile));
         c1.addView(pill("Voir le tableau", PALE, BLUE, () ->
                 startActivity(new Intent(this, TableActivity.class))));
-        root.addView(c1, lp(-1, -2, 12));
+        pg[4].addView(c1, lp(-1, -2, 12));
         setSide(c1);
 
         // automatisation
@@ -293,7 +300,7 @@ public class MainActivity extends Activity {
             }
             refresh();
         }));
-        root.addView(c2, lp(-1, -2, 12));
+        pg[1].addView(c2, lp(-1, -2, 12));
         setSide(c2);
 
         // lectures de l'application
@@ -305,7 +312,7 @@ public class MainActivity extends Activity {
         c3.addView(pill("Choisir le dossier logs", PALE, BLUE, this::pickLogDir));
         c3.addView(pill("Choisir des fichiers .txt / exporter", PALE, BLUE, () ->
                 startActivity(new Intent(this, TableActivity.class))));
-        root.addView(c3, lp(-1, -2, 12));
+        pg[2].addView(c3, lp(-1, -2, 12));
         setSide(c3);
 
         // reglages
@@ -326,7 +333,7 @@ public class MainActivity extends Activity {
             ScanService.saveCfg(this);
             refresh();
         }));
-        root.addView(c4, lp(-1, -2, 12));
+        pg[3].addView(c4, lp(-1, -2, 12));
         setSide(c4);
 
         // avance
@@ -366,17 +373,192 @@ public class MainActivity extends Activity {
         out.setTextIsSelectable(true);
         advBox.addView(out);
         c5.addView(advBox);
-        root.addView(c5, lp(-1, -2, 12));
+        pg[4].addView(c5, lp(-1, -2, 12));
         setSide(c5);
-        root.setPadding(0, 0, 0, dp(24));
 
-        ScrollView sv = new ScrollView(this);
-        sv.setBackgroundColor(PAGE);
-        sv.addView(root);
-        setContentView(sv);
+        buildShell(root);
         if (getIntent() != null && getIntent().getBooleanExtra("pickTable", false)) {
-            sv.post(this::pickFile);
+            root.post(this::pickFile);
         }
+    }
+
+    // ---------- navigation: barre du haut, poignee, menu lateral, menu a trois points ----------
+    private LinearLayout[] pg;
+    private ScrollView contentScroll;
+    private TextView barTitle;
+    private android.widget.FrameLayout shell;
+    private View scrim, drawer;
+    private boolean drawerOpen;
+    private int section;
+    private final String[] SECTION_NAMES = {"Accueil", "Lecture", "Historique et rapports", "Automatisation", "Param\u00E8tres"};
+
+    private void buildShell(LinearLayout unused) {
+        shell = new android.widget.FrameLayout(this);
+        shell.setBackgroundColor(PAGE);
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+
+        // barre fine
+        LinearLayout bar = new LinearLayout(this);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        bar.setBackgroundColor(0xFF1E3A8A);
+        bar.setPadding(dp(6), dp(30), dp(6), dp(6));
+        View burger = barBtn(IconView.LIST, v -> setDrawer(true));
+        barTitle = tv("Smart Keyboard", 18, 0xFFFFFFFF, true);
+        barTitle.setPadding(dp(8), 0, 0, 0);
+        TextView more = tv("\u22EE", 24, 0xFFFFFFFF, true);
+        more.setGravity(android.view.Gravity.CENTER);
+        more.setOnClickListener(v -> showMore(v));
+        bar.addView(burger, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        bar.addView(barTitle, new LinearLayout.LayoutParams(0, -2, 1f));
+        bar.addView(more, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        col.addView(bar, new LinearLayout.LayoutParams(-1, -2));
+
+        contentScroll = new ScrollView(this);
+        contentScroll.setBackgroundColor(PAGE);
+        col.addView(contentScroll, new LinearLayout.LayoutParams(-1, 0, 1f));
+        shell.addView(col, new android.widget.FrameLayout.LayoutParams(-1, -1));
+
+        // poignee tres discrete sur le bord gauche
+        android.widget.FrameLayout handle = new android.widget.FrameLayout(this);
+        View pill = new View(this);
+        pill.setBackground(shape(0x881E3A8A, 3));
+        handle.addView(pill, new android.widget.FrameLayout.LayoutParams(dp(4), dp(56), android.view.Gravity.CENTER_VERTICAL));
+        handle.setOnClickListener(v -> setDrawer(true));
+        android.widget.FrameLayout.LayoutParams hp = new android.widget.FrameLayout.LayoutParams(dp(22), dp(120),
+                android.view.Gravity.START | android.view.Gravity.CENTER_VERTICAL);
+        shell.addView(handle, hp);
+
+        // voile + menu lateral
+        scrim = new View(this);
+        scrim.setBackgroundColor(0x66000000);
+        scrim.setVisibility(View.GONE);
+        scrim.setOnClickListener(v -> setDrawer(false));
+        shell.addView(scrim, new android.widget.FrameLayout.LayoutParams(-1, -1));
+        drawer = buildDrawer();
+        drawer.setVisibility(View.GONE);
+        shell.addView(drawer, new android.widget.FrameLayout.LayoutParams(dp(290), -1, android.view.Gravity.START));
+        setContentView(shell);
+        showSection(0);
+    }
+
+    private View barBtn(int icon, View.OnClickListener l) {
+        android.widget.FrameLayout f = new android.widget.FrameLayout(this);
+        f.addView(new IconView(this, icon, 0xFFFFFFFF),
+                new android.widget.FrameLayout.LayoutParams(dp(22), dp(22), android.view.Gravity.CENTER));
+        f.setOnClickListener(l);
+        return f;
+    }
+
+    private View buildDrawer() {
+        LinearLayout d = new LinearLayout(this);
+        d.setOrientation(LinearLayout.VERTICAL);
+        d.setBackgroundColor(0xFFFFFFFF);
+        d.setClickable(true);
+        LinearLayout head = new LinearLayout(this);
+        head.setOrientation(LinearLayout.VERTICAL);
+        head.setBackgroundColor(0xFF1E3A8A);
+        head.setPadding(dp(20), dp(40), dp(20), dp(18));
+        head.addView(tv("Smart Keyboard", 22, 0xFFFFFFFF, true));
+        head.addView(tv("Lecture intelligente des compteurs", 13, 0xCCFFFFFF, false));
+        d.addView(head, new LinearLayout.LayoutParams(-1, -2));
+        ScrollView sc = new ScrollView(this);
+        LinearLayout items = new LinearLayout(this);
+        items.setOrientation(LinearLayout.VERTICAL);
+        items.setPadding(dp(8), dp(8), dp(8), dp(8));
+        items.addView(drawerItem(IconView.HOME, "Accueil", () -> showSection(0)));
+        items.addView(drawerItem(IconView.KB, "Lecture des compteurs", () -> showSection(1)));
+        items.addView(drawerItem(IconView.LIST, "Recherche", () -> startActivity(new Intent(this, TableActivity.class))));
+        items.addView(drawerItem(IconView.TABLE, "Tableau des compteurs", () -> startActivity(new Intent(this, TableActivity.class))));
+        items.addView(drawerItem(IconView.DOWN, "Importer / Exporter", this::importExportMenu));
+        items.addView(drawerItem(IconView.CHART, "Historique et rapports", () -> showSection(2)));
+        items.addView(drawerItem(IconView.BOLT, "Automatisation", () -> showSection(3)));
+        items.addView(drawerItem(IconView.GEAR, "Param\u00E8tres", () -> showSection(4)));
+        items.addView(drawerItem(IconView.FILE, "Aide / version", () -> new AlertDialog.Builder(this)
+                .setTitle("Smart Keyboard").setMessage(VERSION + "\nClavier de relev\u00E9 + lecture automatique.\n"
+                        + "Menu: touchez la petite barre au bord gauche ou l'ic\u00F4ne en haut.")
+                .setPositiveButton("OK", null).show()));
+        sc.addView(items);
+        d.addView(sc, new LinearLayout.LayoutParams(-1, 0, 1f));
+        return d;
+    }
+
+    private View drawerItem(int icon, String label, Runnable r) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(14), dp(13), dp(14), dp(13));
+        row.addView(new IconView(this, icon, BLUE), new LinearLayout.LayoutParams(dp(22), dp(22)));
+        TextView t = tv(label, 15, INK, false);
+        t.setPadding(dp(16), 0, 0, 0);
+        row.addView(t);
+        android.util.TypedValue ta = new android.util.TypedValue();
+        getTheme().resolveAttribute(android.R.attr.selectableItemBackground, ta, true);
+        row.setBackgroundResource(ta.resourceId);
+        row.setOnClickListener(v -> {
+            setDrawer(false);
+            r.run();
+        });
+        return row;
+    }
+
+    private void setDrawer(boolean open) {
+        drawerOpen = open;
+        drawer.setVisibility(open ? View.VISIBLE : View.GONE);
+        scrim.setVisibility(open ? View.VISIBLE : View.GONE);
+        if (open) {
+            drawer.setTranslationX(-dp(290));
+            drawer.animate().translationX(0).setDuration(180).start();
+        }
+    }
+
+    private void showSection(int i) {
+        section = i;
+        contentScroll.removeAllViews();
+        for (LinearLayout p : pg) {
+            if (p.getParent() instanceof android.view.ViewGroup) ((android.view.ViewGroup) p.getParent()).removeView(p);
+        }
+        contentScroll.addView(pg[i]);
+        contentScroll.scrollTo(0, 0);
+        barTitle.setText(i == 0 ? "Smart Keyboard" : SECTION_NAMES[i]);
+    }
+
+    private void importExportMenu() {
+        new AlertDialog.Builder(this).setTitle("Importer / Exporter")
+                .setItems(new String[]{"Importer un fichier (Excel / CSV / JSON)", "Exporter (ouvrir le tableau)"}, (dlg, w) -> {
+                    if (w == 0) pickFile();
+                    else startActivity(new Intent(this, TableActivity.class));
+                }).show();
+    }
+
+    private void showMore(View anchor) {
+        android.widget.PopupMenu m = new android.widget.PopupMenu(this, anchor);
+        m.getMenu().add(0, 1, 0, "Importer un fichier");
+        m.getMenu().add(0, 2, 1, "Voir le tableau");
+        m.getMenu().add(0, 3, 2, "Lire le journal maintenant");
+        m.getMenu().add(0, 4, 3, "Lancer l'automatisation");
+        m.setOnMenuItemClickListener(it -> {
+            switch (it.getItemId()) {
+                case 1: pickFile(); break;
+                case 2: startActivity(new Intent(this, TableActivity.class)); break;
+                case 3: LogAuto.run(this, true); break;
+                case 4: needService(() -> {
+                    ScanService.instance.startAuto();
+                    refresh();
+                }); break;
+                default: break;
+            }
+            return true;
+        });
+        m.show();
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (drawerOpen) setDrawer(false);
+        else if (section != 0) showSection(0);
+        else super.onBackPressed();
     }
 
     /** Marges laterales d'une carte (14 dp). */
