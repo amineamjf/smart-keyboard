@@ -37,11 +37,6 @@ public final class IconView extends View {
         c.drawRoundRect(rf, rad, rad, p);
     }
 
-    private void rr(Canvas c, float l, float t, float r, float b, float rad) {
-        rf.set(l, t, r, b);
-        c.drawRoundRect(rf, rad, rad, p);
-    }
-
     public void setColor(int col) {
         p.setColor(col);
         invalidate();
