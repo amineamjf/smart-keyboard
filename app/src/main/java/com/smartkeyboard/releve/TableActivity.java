@@ -185,6 +185,15 @@ public class TableActivity extends Activity {
         return t;
     }
 
+    private View iconBtn(int icon, String desc, Runnable r) {
+        android.widget.FrameLayout f = new android.widget.FrameLayout(this);
+        f.setContentDescription(desc);
+        f.addView(new IconView(this, icon, 0xFFFFFFFF),
+                new android.widget.FrameLayout.LayoutParams(dp(22), dp(22), android.view.Gravity.CENTER));
+        f.setOnClickListener(v -> r.run());
+        return f;
+    }
+
     private TextView headBtn(String s, Runnable r) {
         TextView t = label(s, 13, 0xFF2563EB, true);
         t.setPadding(dp(14), dp(10), dp(14), dp(10));
@@ -210,7 +219,7 @@ public class TableActivity extends Activity {
             String txt = nmk + (chipFilters[k] == F_ALL ? "" : " " + countFor(chipFilters[k]));
             chipViews[k].setText(txt);
             chipViews[k].setTextColor(on ? 0xFFFFFFFF : 0xFF475569);
-            chipViews[k].setBackground(on ? shape(0xFF0F172A, 20) : cardShape(0xFFFFFFFF, 0xFFE6EAF2, 20));
+            chipViews[k].setBackground(on ? shape(0xFF12286B, 20) : cardShape(0xFFFFFFFF, 0xFFDDE3F0, 20));
         }
     }
 
@@ -422,6 +431,12 @@ public class TableActivity extends Activity {
             fillC = C_STOP;
             lineC = C_STOP_L;
         }
+        final boolean unread = !isN(r.newIdx);
+        int accent = isNeg ? 0xFFE57373 : isHigh ? 0xFFF0A93B : isStop ? 0xFF7FA8DC : 0xFF5CB885;
+        if (unread) {
+            fillC = 0xFFF1F4F9;
+            accent = 0xFFB8C0D0;
+        }
         cardBgC = fillC;
         iconBgC = 0xAAFFFFFF;
         iconFgC = isNeg ? 0xFF8E1B1B : isHigh ? 0xFF8A5200 : isStop ? 0xFF1F4E8C : 0xFF1B6B43;
@@ -432,7 +447,7 @@ public class TableActivity extends Activity {
 
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackground(cardShape(0xFFFFFFFF, (fillC == C_OK ? 0xFFE3E8F2 : lineC), 20));
+        card.setBackground(null);
         card.setPadding(dp(14), dp(12), dp(14), dp(12));
 
         boolean on = isN(r.oldIdx), nn = isN(r.newIdx);
@@ -599,7 +614,15 @@ public class TableActivity extends Activity {
             nt.setPadding(0, dp(6), 0, 0);
             card.addView(nt);
         }
-        outer.addView(card, new LinearLayout.LayoutParams(-1, -2));
+        LinearLayout wrap = new LinearLayout(this);
+        wrap.setOrientation(LinearLayout.HORIZONTAL);
+        wrap.setBackground(cardShape(0xFFFFFFFF, 0xFFE3E8F2, 18));
+        wrap.setClipToOutline(true);
+        View bar = new View(this);
+        bar.setBackgroundColor(accent);
+        wrap.addView(bar, new LinearLayout.LayoutParams(dp(6), -1));
+        wrap.addView(card, new LinearLayout.LayoutParams(0, -2, 1f));
+        outer.addView(wrap, new LinearLayout.LayoutParams(-1, -2));
         return outer;
     }
 
@@ -1216,28 +1239,60 @@ public class TableActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(0xFFF4F6FB);
 
-        // en-tete
+        // en-tete: retour, titre, filtre par tournee, outils (icones)
         LinearLayout top = new LinearLayout(this);
         top.setOrientation(LinearLayout.HORIZONTAL);
         top.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        top.setBackgroundColor(0xFF1E3A8A);
-        top.setPadding(dp(18), dp(30), dp(12), dp(12));
+        top.setBackgroundColor(0xFF12286B);
+        top.setPadding(dp(6), dp(30), dp(6), dp(10));
+        top.addView(iconBtn(IconView.BACK, "Retour", this::finish), new LinearLayout.LayoutParams(dp(46), dp(46)));
         LinearLayout tt = new LinearLayout(this);
         tt.setOrientation(LinearLayout.VERTICAL);
-        tt.addView(label("Tableau", 22, 0xFFFFFFFF, true));
-        head = label("", 13, 0xCCFFFFFF, false);
+        tt.setPadding(dp(6), 0, 0, 0);
+        tt.addView(label("Compteurs", 19, 0xFFFFFFFF, true));
+        head = label("", 12, 0xCCFFFFFF, false);
         tt.addView(head);
         top.addView(tt, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        top.addView(headBtn("Tourn\u00E9es", this::pickTournees));
-        top.addView(headBtn("Outils \u25BE", this::showTools));
+        top.addView(iconBtn(IconView.FILTER, "Tourn\u00E9es", this::pickTournees), new LinearLayout.LayoutParams(dp(46), dp(46)));
+        top.addView(iconBtn(IconView.MORE, "Outils", this::showTools), new LinearLayout.LayoutParams(dp(46), dp(46)));
         root.addView(top);
+
+        // recherche
+        LinearLayout sbox = new LinearLayout(this);
+        sbox.setOrientation(LinearLayout.HORIZONTAL);
+        sbox.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        sbox.setBackground(cardShape(0xFFFFFFFF, 0xFFE6EAF2, 16));
+        sbox.setPadding(dp(14), 0, dp(10), 0);
+        sbox.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        sbox.addView(new IconView(this, IconView.SEARCH, 0xFF6A7694), new LinearLayout.LayoutParams(dp(20), dp(20)));
+        final EditText search = new EditText(this);
+        search.setHint("N\u00B0 compteur, contrat ou client");
+        search.setSingleLine(true);
+        search.setTextSize(14);
+        search.setBackground(null);
+        search.addTextChangedListener(new android.text.TextWatcher() {
+            public void beforeTextChanged(CharSequence s, int a, int b, int c) {
+            }
+
+            public void onTextChanged(CharSequence s, int a, int b, int c) {
+            }
+
+            public void afterTextChanged(android.text.Editable e) {
+                query = e.toString().trim().toLowerCase();
+                reload();
+            }
+        });
+        sbox.addView(search, new LinearLayout.LayoutParams(0, dp(46), 1f));
+        LinearLayout.LayoutParams sp0 = new LinearLayout.LayoutParams(-1, -2);
+        sp0.setMargins(dp(14), dp(12), dp(14), 0);
+        root.addView(sbox, sp0);
 
         // filtres
         HorizontalScrollView hs = new HorizontalScrollView(this);
         hs.setHorizontalScrollBarEnabled(false);
         LinearLayout bar = new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
-        bar.setPadding(dp(14), dp(12), dp(6), 0);
+        bar.setPadding(dp(14), dp(10), dp(6), dp(6));
         chipNames = new String[]{"Tous", "Envoy\u00E9s", "\u00C0 v\u00E9rifier", "Erreurs", "Non vus",
                 "Hors application", "\u00C9lev\u00E9es", "N\u00E9gatifs", "\uD83D\uDCF7 Photos", "\u26A0 Saut\u00E9s auto"};
         chipFilters = new int[]{F_ALL, F_SENT, F_ORANGE, F_ERR, F_NEW, F_UNL, F_HIGH, F_NEG, F_PHOTO, F_SKIP};
@@ -1264,35 +1319,6 @@ public class TableActivity extends Activity {
         }
         hs.addView(bar);
         root.addView(hs);
-
-        // recherche
-        LinearLayout sbox = new LinearLayout(this);
-        sbox.setOrientation(LinearLayout.HORIZONTAL);
-        sbox.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        sbox.setBackground(cardShape(0xFFFFFFFF, 0xFFE6EAF2, 16));
-        sbox.setPadding(dp(14), 0, dp(10), 0);
-        sbox.addView(label("\uD83D\uDD0D", 16, 0xFF5B6573, false));
-        final EditText search = new EditText(this);
-        search.setHint("Rechercher: compteur, client, contrat, tourn\u00E9e...");
-        search.setSingleLine(true);
-        search.setTextSize(14);
-        search.setBackground(null);
-        search.addTextChangedListener(new android.text.TextWatcher() {
-            public void beforeTextChanged(CharSequence s, int a, int b, int c) {
-            }
-
-            public void onTextChanged(CharSequence s, int a, int b, int c) {
-            }
-
-            public void afterTextChanged(android.text.Editable e) {
-                query = e.toString().trim().toLowerCase();
-                reload();
-            }
-        });
-        sbox.addView(search, new LinearLayout.LayoutParams(0, dp(46), 1f));
-        LinearLayout.LayoutParams sp0 = new LinearLayout.LayoutParams(-1, -2);
-        sp0.setMargins(dp(14), dp(12), dp(14), dp(4));
-        root.addView(sbox, sp0);
 
         ListView lv = new ListView(this);
         lv.setDivider(null);

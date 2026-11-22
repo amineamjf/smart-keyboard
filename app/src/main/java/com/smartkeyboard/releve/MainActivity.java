@@ -473,12 +473,10 @@ public class MainActivity extends Activity {
         bar.setGravity(android.view.Gravity.CENTER_VERTICAL);
         bar.setBackgroundColor(0xFF12286B);
         bar.setPadding(dp(6), dp(30), dp(6), dp(6));
-        View burger = barBtn(IconView.LIST, v -> setDrawer(true));
+        View burger = barBtn(IconView.GRID, v -> setDrawer(true));
         barTitle = tv("Smart Keyboard", 18, 0xFFFFFFFF, true);
         barTitle.setPadding(dp(8), 0, 0, 0);
-        TextView more = tv("\u22EE", 24, 0xFFFFFFFF, true);
-        more.setGravity(android.view.Gravity.CENTER);
-        more.setOnClickListener(v -> showMore(v));
+        View more = barBtn(IconView.MORE, v -> showMore(v));
         bar.addView(burger, new LinearLayout.LayoutParams(dp(44), dp(44)));
         bar.addView(barTitle, new LinearLayout.LayoutParams(0, -2, 1f));
         bar.addView(more, new LinearLayout.LayoutParams(dp(44), dp(44)));

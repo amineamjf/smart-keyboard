@@ -12,7 +12,7 @@ public final class IconView extends View {
 
     public static final int DOWN = 0, FOLDER = 1, FILE = 2, LIST = 3, SHARE = 4, SAVE = 5, GEAR = 6,
             PHONE = 7, MAIL = 8, SIGMA = 9, RESTORE = 10, TABLE = 11, PLAY = 12, HOME = 13, MIC = 14,
-            CAMERA = 15, PIN = 16, CHART = 17, TEXT = 18, KB = 19, BOLT = 20, UP = 21, DN = 22, CHECK = 23;
+            CAMERA = 15, PIN = 16, CHART = 17, TEXT = 18, KB = 19, BOLT = 20, UP = 21, DN = 22, CHECK = 23, GRID = 24, MORE = 25, SEARCH = 26, BACK = 27, FILTER = 28;
 
     private final int type;
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -30,6 +30,11 @@ public final class IconView extends View {
 
     private void line(Canvas c, float x1, float y1, float x2, float y2) {
         c.drawLine(x1, y1, x2, y2, p);
+    }
+
+    private void rr(Canvas c, float l, float t, float r, float b, float rad) {
+        rf.set(l, t, r, b);
+        c.drawRoundRect(rf, rad, rad, p);
     }
 
     private void rr(Canvas c, float l, float t, float r, float b, float rad) {
@@ -165,6 +170,40 @@ public final class IconView extends View {
                 path.lineTo(8, 19);
                 path.close();
                 c.drawPath(path, p);
+                break;
+            case GRID:
+                p.setStrokeWidth(2f);
+                rr(c, 4, 4, 10.5f, 10.5f, 2.2f);
+                rr(c, 13.5f, 4, 20, 10.5f, 2.2f);
+                rr(c, 4, 13.5f, 10.5f, 20, 2.2f);
+                rr(c, 13.5f, 13.5f, 20, 20, 2.2f);
+                break;
+            case MORE:
+                p.setStyle(Paint.Style.FILL);
+                c.drawCircle(12, 5, 2f, p);
+                c.drawCircle(12, 12, 2f, p);
+                c.drawCircle(12, 19, 2f, p);
+                p.setStyle(Paint.Style.STROKE);
+                break;
+            case SEARCH:
+                p.setStrokeWidth(2.2f);
+                c.drawCircle(10.5f, 10.5f, 6.5f, p);
+                line(c, 15.5f, 15.5f, 20, 20);
+                break;
+            case BACK:
+                p.setStrokeWidth(2.4f);
+                line(c, 19, 12, 5, 12);
+                line(c, 11, 5.5f, 5, 12);
+                line(c, 11, 18.5f, 5, 12);
+                break;
+            case FILTER:
+                p.setStrokeWidth(2f);
+                line(c, 4, 7, 11, 7);
+                line(c, 17, 7, 20, 7);
+                line(c, 4, 17, 7, 17);
+                line(c, 13, 17, 20, 17);
+                c.drawCircle(14, 7, 2.6f, p);
+                c.drawCircle(10, 17, 2.6f, p);
                 break;
             case CHECK:
                 p.setStrokeWidth(2.8f);
