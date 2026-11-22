@@ -79,17 +79,17 @@ public class KeyboardService extends InputMethodService {
 
     private void applyTheme() {
         if (lightTheme) {
-            C_BG = 0xFFD5D9DF; C_KEY = 0xFFFFFFFF; C_KEY_SH = 0xFFB8BDC6;
-            C_DARK = 0xFFB9BFC9; C_DARK_SH = 0xFF9AA1AD; C_TEXT = 0xFF0B0C0E;
-            C_LIGHT = 0xFFE9ECF0; C_LIGHT_SH = 0xFFBFC4CC;
-            C_GREEN = 0xFF17803F; C_GREEN_SH = 0xFF0F5F2D;
-            C_TEAL = 0xFF1F5FD0; C_TEAL_SH = 0xFF1747A0;
+            C_BG = 0xFFE8ECF4; C_KEY = 0xFFFFFFFF; C_KEY_SH = 0xFFC9D1E0;
+            C_DARK = 0xFFD3DAE8; C_DARK_SH = 0xFFB3BCD0; C_TEXT = 0xFF0F1E4A;
+            C_LIGHT = 0xFFEEF2F9; C_LIGHT_SH = 0xFFC9D1E0;
+            C_GREEN = 0xFF15803D; C_GREEN_SH = 0xFF0F5F2D;
+            C_TEAL = 0xFF1D4ED8; C_TEAL_SH = 0xFF1E3A8A;
             C_RED = 0xFFC62828; C_RED_SH = 0xFF8E1B1B;
             C_AMBER = 0xFFC77000; C_AMBER_SH = 0xFF9A5600;
-            C_STRIP_BG = 0xFFF4F5F7; C_STRIP_TXT = 0xFF0B0C0E; C_OLD = 0xFFB35000; C_EDGE = 0xFF9AA1AD;
+            C_STRIP_BG = 0xFFF4F6FB; C_STRIP_TXT = 0xFF0F1E4A; C_OLD = 0xFFB35000; C_EDGE = 0xFFD5DBE8;
             S_NUM_BG = 0xFFA8F0FF; S_NUM_TX = 0xFF06223A; S_NUM_ED = 0;
             S_OLD_BG = 0xFF2563EB; S_OLD_TX = 0xFFFFFFFF;
-            S_NEW_BG = 0xFF1FA34A; S_NEW_TX = 0xFFFFFFFF;
+            S_NEW_BG = 0xFF16A34A; S_NEW_TX = 0xFFFFFFFF;
             S_SUS_BG = 0xFFF59E0B; S_SUS_TX = 0xFF1F1200;
         } else {
             C_BG = 0xFF17181A; C_KEY = 0xFF38393D; C_KEY_SH = 0xFF2B2C2F;
@@ -198,11 +198,11 @@ public class KeyboardService extends InputMethodService {
         return sl;
     }
 
-    private int radiusDp = 12;
+    private int radiusDp = 14;
 
     private LinearLayout.LayoutParams lpT(int w, int h, float weight) {
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(w, h, weight);
-        int m = dp(1.5f);
+        int m = dp(2.5f);
         p.setMargins(m, m, m, m);
         return p;
     }
