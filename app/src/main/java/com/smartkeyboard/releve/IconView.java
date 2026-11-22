@@ -12,7 +12,7 @@ public final class IconView extends View {
 
     public static final int DOWN = 0, FOLDER = 1, FILE = 2, LIST = 3, SHARE = 4, SAVE = 5, GEAR = 6,
             PHONE = 7, MAIL = 8, SIGMA = 9, RESTORE = 10, TABLE = 11, PLAY = 12, HOME = 13, MIC = 14,
-            CAMERA = 15, PIN = 16, CHART = 17, TEXT = 18, KB = 19, BOLT = 20, UP = 21, DN = 22;
+            CAMERA = 15, PIN = 16, CHART = 17, TEXT = 18, KB = 19, BOLT = 20, UP = 21, DN = 22, CHECK = 23;
 
     private final int type;
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -35,6 +35,11 @@ public final class IconView extends View {
     private void rr(Canvas c, float l, float t, float r, float b, float rad) {
         rf.set(l, t, r, b);
         c.drawRoundRect(rf, rad, rad, p);
+    }
+
+    public void setColor(int col) {
+        p.setColor(col);
+        invalidate();
     }
 
     @Override
@@ -160,6 +165,11 @@ public final class IconView extends View {
                 path.lineTo(8, 19);
                 path.close();
                 c.drawPath(path, p);
+                break;
+            case CHECK:
+                p.setStrokeWidth(2.8f);
+                line(c, 5, 12.5f, 9.5f, 17);
+                line(c, 9.5f, 17, 19, 7);
                 break;
             case HOME:
                 path.reset();

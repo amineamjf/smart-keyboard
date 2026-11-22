@@ -395,10 +395,13 @@ public class TableActivity extends Activity {
         LinearLayout c = new LinearLayout(this);
         c.setOrientation(LinearLayout.VERTICAL);
         c.setGravity(android.view.Gravity.CENTER);
-        c.setBackground(shape(0xB3FFFFFF, 12));
-        c.setPadding(dp(4), dp(6), dp(4), dp(7));
-        c.addView(label(title, 10, 0xFF475569, false));
-        TextView v = label(value, 17, valueColor, true);
+        c.setBackground(null);
+        c.setGravity(android.view.Gravity.START);
+        c.setPadding(dp(2), dp(2), dp(2), dp(2));
+        TextView tl = label(title.toUpperCase(), 10, 0xFF6A7694, true);
+        tl.setLetterSpacing(0.04f);
+        c.addView(tl);
+        TextView v = label(value, 16, valueColor, true);
         c.addView(v);
         return c;
     }
@@ -429,7 +432,7 @@ public class TableActivity extends Activity {
 
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackground(cardShape(fillC, lineC, 20));
+        card.setBackground(cardShape(0xFFFFFFFF, (fillC == C_OK ? 0xFFE3E8F2 : lineC), 20));
         card.setPadding(dp(14), dp(12), dp(14), dp(12));
 
         boolean on = isN(r.oldIdx), nn = isN(r.newIdx);
@@ -437,17 +440,18 @@ public class TableActivity extends Activity {
         long cons = on && nn ? Long.parseLong(r.newIdx) - Long.parseLong(r.oldIdx) : 0;
         Long md = medians.get(Meters.tourneeOf(r));
 
-        // 1) numero du compteur + tournee (code seul)  2) contrat  3) nom  4) adresse
+        // 1) nom du client + tournee  2) contrat et compteur  3) adresse
+        String nm = Meters.nameOf(r);
         LinearLayout head1 = new LinearLayout(this);
         head1.setOrientation(LinearLayout.HORIZONTAL);
         head1.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        head1.addView(label("N\u00B0 " + noZeros(r.compteur), 17, 0xFF0F172A, true),
+        head1.addView(label(nm.isEmpty() ? "N\u00B0 " + noZeros(r.compteur) : nm, 16, 0xFF0B1B3F, true),
                 new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         String tr = Meters.tourneeOf(r);
         if (tr != null && !tr.isEmpty()) {
-            TextView tc = label(tr, 11, 0xFF0F172A, true);
+            TextView tc = label(tr, 11, 0xFF44506D, true);
             tc.setPadding(dp(9), dp(3), dp(9), dp(3));
-            tc.setBackground(shape(0xAAFFFFFF, 9));
+            tc.setBackground(shape(0xFFEEF2F9, 9));
             head1.addView(tc);
         }
         int sc = r.warn.isEmpty() ? stripe(r.status) : 0xFFC77000;
@@ -463,15 +467,16 @@ public class TableActivity extends Activity {
         }
         card.addView(head1);
         String ct = Meters.contractOf(r);
-        if (!ct.isEmpty()) card.addView(plain("Contrat " + ct, 13, 0xFF334155, false));
-        String nm = Meters.nameOf(r);
-        if (!nm.isEmpty()) {
-            TextView nt0 = plain(nm, 15, 0xFF0F172A, true);
-            ((LinearLayout.LayoutParams) nt0.getLayoutParams()).topMargin = dp(8);
-            card.addView(nt0);
+        StringBuilder idl = new StringBuilder();
+        if (!ct.isEmpty()) idl.append("Contrat ").append(ct);
+        if (!noZeros(r.compteur).isEmpty()) idl.append(idl.length() > 0 ? "  \u00B7  " : "").append("Compteur ").append(noZeros(r.compteur));
+        if (idl.length() > 0) {
+            TextView idt = plain(idl.toString(), 13, 0xFF334155, false);
+            ((LinearLayout.LayoutParams) idt.getLayoutParams()).topMargin = dp(4);
+            card.addView(idt);
         }
         String ad = Meters.addressOf(r);
-        if (!ad.isEmpty()) card.addView(plain(ad, 12, 0xFF475569, false));
+        if (!ad.isEmpty()) card.addView(plain(ad, 12, 0xFF5B6784, false));
         Meters.Todo tdo = Meters.TODO.get(r.key);
         if (tdo != null && !tdo.phone.isEmpty()) card.addView(plain("\u260E " + tdo.phone, 12, 0xFF334155, false));
 
@@ -480,12 +485,15 @@ public class TableActivity extends Activity {
         cells.setOrientation(LinearLayout.HORIZONTAL);
         LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         cp.rightMargin = dp(6);
-        cells.addView(cell("Ancien index", r.oldIdx.isEmpty() ? "?" : r.oldIdx, 0xFF0F172A), cp);
+        cells.setBackground(shape(fillC, 12));
+        cells.setPadding(dp(12), dp(8), dp(12), dp(8));
+        cp.rightMargin = 0;
+        cells.addView(cell("Ancien", r.oldIdx.isEmpty() ? "?" : r.oldIdx, 0xFF1E4FD8), cp);
         LinearLayout.LayoutParams cp2 = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        cp2.rightMargin = dp(6);
-        cells.addView(cell("Nouvel index", r.newIdx.isEmpty() ? "\u2014" : r.newIdx, 0xFF0F172A), cp2);
+        cp2.rightMargin = 0;
+        cells.addView(cell("Nouveau", r.newIdx.isEmpty() ? "\u2014" : r.newIdx, 0xFF12803F), cp2);
         String cv = on && nn ? (cons > 0 ? "+" + cons : cons < 0 ? "\u2212" + (-cons) : "0") : "\u2014";
-        cells.addView(cell("Consommation", cv, iconFgC), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        cells.addView(cell("Conso", cv, iconFgC), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(-1, -2);
         cl.topMargin = dp(10);
         card.addView(cells, cl);

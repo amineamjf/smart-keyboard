@@ -41,7 +41,8 @@ public class MainActivity extends Activity {
             INK = 0xFF0B0C0E, GRAY = 0xFF5B6573, PALE = 0xFFEAF0FF, CHIP = 0xFFEEF0F3, PAGE = 0xFFF4F6FB;
     private static final int REQ_LOGDIR = 12;
 
-    private TextView chipService, chipMode, chipRows, heroNum;
+    private TextView chipService, chipMode, chipRows, heroNum, svcTitle, pctPill, tLus, tAlire, tAnom;
+    private LinearLayout svcCard;
     private android.widget.ProgressBar heroBar;
     private TextView accVal, kbVal, tabVal, autoLine, logSub, logVal;
     private TextView modeVal, photoVal, jumpVal, dropVal;
@@ -171,6 +172,16 @@ public class MainActivity extends Activity {
         return t;
     }
 
+    private TextView outlineBtn(String label, int fg, int stroke, Runnable r) {
+        TextView t = tv(label, 14, fg, true);
+        t.setGravity(android.view.Gravity.CENTER);
+        android.graphics.drawable.GradientDrawable g = shape(0xFFFFFFFF, 16);
+        g.setStroke(dp(2), stroke);
+        t.setBackground(g);
+        t.setOnClickListener(v -> r.run());
+        return t;
+    }
+
     private TextView subText(String s) {
         return tv(s, 12, GRAY, false);
     }
@@ -207,27 +218,27 @@ public class MainActivity extends Activity {
             pg[i].setPadding(0, 0, 0, dp(24));
         }
 
-        // en-tete: carte de progression en degrade
-        LinearLayout top = new LinearLayout(this);
-        top.setOrientation(LinearLayout.VERTICAL);
-        top.setBackground(new android.graphics.drawable.GradientDrawable(
-                android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
-                new int[]{0xFF2563EB, 0xFF7C3AED}) {
-            {
-                setCornerRadius(dp(26));
-            }
-        });
-        top.setPadding(dp(20), dp(20), dp(20), dp(18));
-        top.addView(tv("Relev\u00E9 Clavier", 24, 0xFFFFFFFF, true));
-        top.addView(tv(VERSION, 12, 0xCCFFFFFF, false));
-        heroNum = tv("", 30, 0xFFFFFFFF, true);
-        heroNum.setPadding(0, dp(10), 0, dp(6));
-        top.addView(heroNum);
-        heroBar = new android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
-        heroBar.setMax(1000);
-        heroBar.setProgressTintList(android.content.res.ColorStateList.valueOf(0xFFFFFFFF));
-        heroBar.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(0x55FFFFFF));
-        top.addView(heroBar, new LinearLayout.LayoutParams(-1, dp(8)));
+        // carte "service" (verte si actif, orange sinon)
+        svcCard = new LinearLayout(this);
+        svcCard.setOrientation(LinearLayout.VERTICAL);
+        svcCard.setPadding(dp(18), dp(16), dp(18), dp(14));
+        LinearLayout svcRow = new LinearLayout(this);
+        svcRow.setOrientation(LinearLayout.HORIZONTAL);
+        svcRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        android.widget.FrameLayout ok = new android.widget.FrameLayout(this);
+        ok.setBackground(shape(0xFFFFFFFF, 26));
+        ok.addView(new IconView(this, IconView.CHECK, 0xFF12803F),
+                new android.widget.FrameLayout.LayoutParams(dp(26), dp(26), android.view.Gravity.CENTER));
+        svcRow.addView(ok, new LinearLayout.LayoutParams(dp(52), dp(52)));
+        LinearLayout svcTxt = new LinearLayout(this);
+        svcTxt.setOrientation(LinearLayout.VERTICAL);
+        svcTxt.setPadding(dp(14), 0, 0, 0);
+        svcTitle = tv("Service actif", 20, 0xFFFFFFFF, true);
+        svcTxt.addView(svcTitle);
+        TextView vers = tv(VERSION, 12, 0xDDFFFFFF, false);
+        svcTxt.addView(vers);
+        svcRow.addView(svcTxt, new LinearLayout.LayoutParams(0, -2, 1f));
+        svcCard.addView(svcRow);
         LinearLayout chips = new LinearLayout(this);
         chips.setOrientation(LinearLayout.HORIZONTAL);
         chips.setPadding(0, dp(12), 0, 0);
@@ -237,31 +248,89 @@ public class MainActivity extends Activity {
         chips.addView(chipService);
         chips.addView(chipMode);
         chips.addView(chipRows);
-        top.addView(chips);
+        svcCard.addView(chips);
         LinearLayout.LayoutParams topLp = lp(-1, -2, 0);
-        topLp.setMargins(dp(14), dp(34), dp(14), 0);
-        pg[0].addView(top, topLp);
-        topLp.topMargin = dp(10);
+        topLp.setMargins(dp(14), dp(16), dp(14), 0);
+        pg[0].addView(svcCard, topLp);
 
-        // actions rapides
-        LinearLayout quick = new LinearLayout(this);
-        quick.setOrientation(LinearLayout.HORIZONTAL);
-        View[] qt = {
-                tile(IconView.TABLE, "Tableau", true, () -> startActivity(new Intent(this, TableActivity.class))),
-                tile(IconView.DOWN, "Importer", false, this::pickFile),
-                tile(IconView.PLAY, "Lancer", false, () -> needService(() -> {
-                    ScanService.instance.startAuto();
-                    refresh();
-                })),
-                tile(IconView.TEXT, "Journal", false, () -> LogAuto.run(this, true))};
-        for (int i = 0; i < qt.length; i++) {
+        // progression du jour
+        LinearLayout prog = new LinearLayout(this);
+        prog.setOrientation(LinearLayout.VERTICAL);
+        prog.setPadding(dp(18), dp(16), dp(18), dp(18));
+        android.graphics.drawable.GradientDrawable pgBg = shape(0xFFFFFFFF, 22);
+        pgBg.setStroke(dp(1), 0xFFE3E8F2);
+        prog.setBackground(pgBg);
+        LinearLayout pr = new LinearLayout(this);
+        pr.setOrientation(LinearLayout.HORIZONTAL);
+        pr.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        TextView pl = tv("Progression du jour", 14, 0xFF5B6784, true);
+        pr.addView(pl, new LinearLayout.LayoutParams(0, -2, 1f));
+        pctPill = tv("0 %", 13, 0xFF1E4FD8, true);
+        pctPill.setPadding(dp(10), dp(4), dp(10), dp(4));
+        pctPill.setBackground(shape(0xFFE6EDFF, 12));
+        pr.addView(pctPill);
+        prog.addView(pr);
+        heroNum = tv("", 30, 0xFF0B1B3F, true);
+        heroNum.setPadding(0, dp(8), 0, dp(8));
+        prog.addView(heroNum);
+        heroBar = new android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        heroBar.setMax(1000);
+        heroBar.setProgressTintList(android.content.res.ColorStateList.valueOf(0xFF2457E6));
+        heroBar.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFFE6EBF5));
+        prog.addView(heroBar, new LinearLayout.LayoutParams(-1, dp(8)));
+        pg[0].addView(prog, lp(-1, -2, 14));
+        ((LinearLayout.LayoutParams) prog.getLayoutParams()).setMargins(dp(14), dp(14), dp(14), 0);
+
+        // trois pastilles d'etat
+        LinearLayout tiles = new LinearLayout(this);
+        tiles.setOrientation(LinearLayout.HORIZONTAL);
+        tLus = tv("0", 26, 0xFF0F2F8A, true);
+        tAlire = tv("0", 26, 0xFF6B3D00, true);
+        tAnom = tv("0", 26, 0xFF7A1510, true);
+        String[] tn = {"Lus", "\u00C0 lire", "Anomalies"};
+        int[] tbg = {0xFFE6EDFF, 0xFFFFF1D6, 0xFFFDE3E3};
+        int[] tfg = {0xFF1E4FD8, 0xFFA15C00, 0xFFB3261E};
+        TextView[] tvv = {tLus, tAlire, tAnom};
+        for (int i = 0; i < 3; i++) {
+            LinearLayout t = new LinearLayout(this);
+            t.setOrientation(LinearLayout.VERTICAL);
+            t.setPadding(dp(14), dp(12), dp(10), dp(12));
+            t.setBackground(shape(tbg[i], 18));
+            t.addView(tv(tn[i], 12, tfg[i], true));
+            tvv[i].setPadding(0, dp(4), 0, 0);
+            t.addView(tvv[i]);
             LinearLayout.LayoutParams q = new LinearLayout.LayoutParams(0, -2, 1f);
-            if (i > 0) q.leftMargin = dp(8);
-            quick.addView(qt[i], q);
+            if (i > 0) q.leftMargin = dp(10);
+            tiles.addView(t, q);
         }
-        LinearLayout.LayoutParams qLp = lp(-1, -2, 12);
-        qLp.setMargins(dp(14), dp(12), dp(14), 0);
-        pg[0].addView(quick, qLp);
+        LinearLayout.LayoutParams tlp = lp(-1, -2, 0);
+        tlp.setMargins(dp(14), dp(14), dp(14), 0);
+        pg[0].addView(tiles, tlp);
+
+        // actions
+        TextView go = tv("\u25B6  Reprendre la lecture", 16, 0xFFFFFFFF, true);
+        go.setGravity(android.view.Gravity.CENTER);
+        go.setBackground(shape(0xFF2457E6, 18));
+        go.setOnClickListener(v -> needService(() -> {
+            ScanService.instance.startAuto();
+            refresh();
+        }));
+        LinearLayout.LayoutParams glp = lp(-1, dp(56), 0);
+        glp.setMargins(dp(14), dp(14), dp(14), 0);
+        pg[0].addView(go, glp);
+
+        LinearLayout two = new LinearLayout(this);
+        two.setOrientation(LinearLayout.HORIZONTAL);
+        TextView search = outlineBtn("Rechercher", 0xFF12286B, 0xFFC9D4EE,
+                () -> startActivity(new Intent(this, TableActivity.class)));
+        TextView imp = outlineBtn("Importer", 0xFF12803F, 0xFFBFE3CD, this::pickFile);
+        two.addView(search, new LinearLayout.LayoutParams(0, dp(52), 1f));
+        LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(0, dp(52), 1f);
+        ilp.leftMargin = dp(10);
+        two.addView(imp, ilp);
+        LinearLayout.LayoutParams twoLp = lp(-1, -2, 0);
+        twoLp.setMargins(dp(14), dp(10), dp(14), 0);
+        pg[0].addView(two, twoLp);
 
         // demarrage
         LinearLayout c1 = card("D\u00E9marrage");
@@ -402,7 +471,7 @@ public class MainActivity extends Activity {
         LinearLayout bar = new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        bar.setBackgroundColor(0xFF1E3A8A);
+        bar.setBackgroundColor(0xFF12286B);
         bar.setPadding(dp(6), dp(30), dp(6), dp(6));
         View burger = barBtn(IconView.LIST, v -> setDrawer(true));
         barTitle = tv("Smart Keyboard", 18, 0xFFFFFFFF, true);
@@ -418,6 +487,7 @@ public class MainActivity extends Activity {
         contentScroll = new ScrollView(this);
         contentScroll.setBackgroundColor(PAGE);
         col.addView(contentScroll, new LinearLayout.LayoutParams(-1, 0, 1f));
+        col.addView(buildNav(), new LinearLayout.LayoutParams(-1, dp(68)));
         shell.addView(col, new android.widget.FrameLayout.LayoutParams(-1, -1));
 
         // poignee tres discrete sur le bord gauche
@@ -441,6 +511,46 @@ public class MainActivity extends Activity {
         shell.addView(drawer, new android.widget.FrameLayout.LayoutParams(dp(290), -1, android.view.Gravity.START));
         setContentView(shell);
         showSection(0);
+    }
+
+    private TextView[] navLbl = new TextView[4];
+    private IconView[] navIc = new IconView[4];
+
+    private View buildNav() {
+        LinearLayout nav = new LinearLayout(this);
+        nav.setOrientation(LinearLayout.HORIZONTAL);
+        nav.setBackgroundColor(0xFFFFFFFF);
+        View line = null;
+        String[] names = {"Accueil", "Lecture", "Tableau", "Historique"};
+        int[] icons = {IconView.HOME, IconView.KB, IconView.TABLE, IconView.CHART};
+        for (int i = 0; i < 4; i++) {
+            final int k = i;
+            LinearLayout it = new LinearLayout(this);
+            it.setOrientation(LinearLayout.VERTICAL);
+            it.setGravity(android.view.Gravity.CENTER);
+            navIc[i] = new IconView(this, icons[i], 0xFF5B6784);
+            it.addView(navIc[i], new LinearLayout.LayoutParams(dp(24), dp(24)));
+            navLbl[i] = tv(names[i], 11, 0xFF5B6784, true);
+            navLbl[i].setPadding(0, dp(3), 0, 0);
+            it.addView(navLbl[i]);
+            it.setOnClickListener(v -> {
+                if (k == 0) showSection(0);
+                else if (k == 1) showSection(1);
+                else if (k == 2) startActivity(new Intent(this, TableActivity.class));
+                else showSection(2);
+            });
+            nav.addView(it, new LinearLayout.LayoutParams(0, -1, 1f));
+        }
+        return nav;
+    }
+
+    private void paintNav() {
+        int act = section == 0 ? 0 : section == 1 ? 1 : section == 2 ? 3 : -1;
+        for (int i = 0; i < 4; i++) {
+            int c = i == act ? 0xFF2457E6 : 0xFF5B6784;
+            navLbl[i].setTextColor(c);
+            navIc[i].setColor(c);
+        }
     }
 
     private View barBtn(int icon, View.OnClickListener l) {
@@ -522,6 +632,7 @@ public class MainActivity extends Activity {
         contentScroll.addView(pg[i]);
         contentScroll.scrollTo(0, 0);
         barTitle.setText(i == 0 ? "Smart Keyboard" : SECTION_NAMES[i]);
+        paintNav();
     }
 
     private void importExportMenu() {
@@ -774,6 +885,12 @@ public class MainActivity extends Activity {
         int tot = Meters.ROWS.size(), sentN = Meters.count(Meters.SENT);
         heroNum.setText(sentN + " / " + tot + " envoy\u00E9s");
         heroBar.setProgress(tot == 0 ? 0 : (int) (1000L * sentN / tot));
+        pctPill.setText((tot == 0 ? 0 : (int) (100L * sentN / tot)) + " %");
+        tLus.setText(String.valueOf(sentN));
+        tAlire.setText(String.valueOf(Math.max(0, tot - sentN)));
+        tAnom.setText(String.valueOf(Meters.count(Meters.SUSPECT) + Meters.count(Meters.ERROR) + Meters.count(Meters.UNKNOWN)));
+        svcTitle.setText(svc ? "Service actif" : "Service inactif");
+        svcCard.setBackground(shape(svc ? 0xFF12803F : 0xFFC77000, 22));
         accVal.setText(svc ? "\u2713 Actif" : "\u00C0 activer");
         accVal.setTextColor(svc ? GREEN : AMBER);
         String defIme = Settings.Secure.getString(getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD);
