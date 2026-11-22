@@ -192,9 +192,14 @@ public class KeyboardService extends InputMethodService {
     }
 
     private Drawable keyBg(int face, int shadow) {
+        // touche "en relief": bord inferieur plus fonce; a l'appui elle s'enfonce
         StateListDrawable sl = new StateListDrawable();
-        sl.addState(new int[]{android.R.attr.state_pressed}, rounded(lighten(face)));
-        sl.addState(new int[]{}, rounded(face));
+        LayerDrawable down = new LayerDrawable(new Drawable[]{rounded(shadow), rounded(lighten(face))});
+        down.setLayerInset(1, 0, dp(2), 0, 0);
+        LayerDrawable up = new LayerDrawable(new Drawable[]{rounded(shadow), rounded(face)});
+        up.setLayerInset(1, 0, 0, 0, dp(2));
+        sl.addState(new int[]{android.R.attr.state_pressed}, down);
+        sl.addState(new int[]{}, up);
         return sl;
     }
 
@@ -272,7 +277,7 @@ public class KeyboardService extends InputMethodService {
     }
 
     private Button digit(final String k) {
-        return makeKey(k, C_KEY, C_KEY_SH, C_TEXT, 28, () -> press(k));
+        return makeKey(k, C_KEY, C_KEY_SH, C_TEXT, 30, () -> press(k));
     }
 
     // ---------- Clavier principal ----------
@@ -1442,7 +1447,7 @@ public class KeyboardService extends InputMethodService {
         root.setBackgroundColor(C_BG);
         root.setPadding(dp(6), dp(6), dp(6), dp(6));
 
-        int totalH = dp(4 * 64);
+        int totalH = dp(4 * 66);
 
         // Colonne gauche : chiffres
         LinearLayout left = new LinearLayout(this);
@@ -1499,9 +1504,9 @@ public class KeyboardService extends InputMethodService {
 
         LinearLayout srow = new LinearLayout(this);
         srow.setOrientation(LinearLayout.HORIZONTAL);
-        srow.addView(modernKey("Rechercher", 0xFF4F8BFF, 0xFF2563EB, () -> search()),
+        srow.addView(modernKey("Rechercher", 0xFF2F66F0, 0xFF1D4ED8, () -> search()),
                 lp(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
-        srow.addView(modernKey("\u21A9 Dernier", 0xFF8B7BFF, 0xFF5B47D6, () -> openLastSent()),
+        srow.addView(modernKey("\u21A9 Dernier", 0xFF1E3A8A, 0xFF12286B, () -> openLastSent()),
                 lp(0, ViewGroup.LayoutParams.MATCH_PARENT, 0.62f));
         right.addView(srow, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
@@ -1511,7 +1516,7 @@ public class KeyboardService extends InputMethodService {
         mid.addView(makeKey("\u2699\nOPTIONS", C_LIGHT, C_LIGHT_SH, C_TEXT, 11,
                 () -> setInputView(buildOptions())),
                 lp(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
-        final Button micKey = makeKey(micLabel(), C_LIGHT, C_LIGHT_SH, C_TEXT, 18, () -> onMic());
+        final Button micKey = makeKey(micLabel(), C_TEAL, C_TEAL_SH, 0xFFFFFFFF, 18, () -> onMic());
         micKey.setOnLongClickListener(v -> {
             boolean want;
             try {
