@@ -3750,7 +3750,13 @@ public class ScanService extends AccessibilityService {
         if (id == null || id.isEmpty()) return null;
         Meters.Row r = Meters.find(id);
         if (r != null) {
-            r.warn = "";
+            if (!Meters.key(r.compteur).equals(Meters.key(id))) {
+                if (!id.equals(aliasLogId)) log("ancien numero " + id + " -> ligne " + r.compteur);
+                aliasLogId = id;
+                r.warn = "ancien compteur " + id + " (remplace par " + r.compteur + ")";
+            } else {
+                r.warn = "";
+            }
             String tn = Meters.tourneeOf(r);
             if (!tn.isEmpty()) Meters.lastTournee = tn;
             return r;
@@ -3764,6 +3770,10 @@ public class ScanService extends AccessibilityService {
         Meters.Row r2 = Meters.findByName(screenValue(root, "NOM"), screenValue(root, "ADRESSE"));
         if (r2 != null) {
             r2.warn = "compteur different: tableau " + r2.compteur + " / ecran " + id;
+            try { Meters.addAlias(Meters.key(id), r2); } catch (Exception ignored) { }
+            log("retrouve par nom: " + id + " -> " + r2.compteur);
+        } else {
+            log("absent du tableau: " + id + " | nom=" + screenValue(root, "NOM") + " | adresse=" + screenValue(root, "ADRESSE"));
         }
         missId = id;
         missRow = r2;
@@ -3772,6 +3782,7 @@ public class ScanService extends AccessibilityService {
         return r2;
     }
 
+    private String aliasLogId = "";
     private String missId = "";
     private Meters.Row missRow = null;
     private long missT = 0;

@@ -193,7 +193,40 @@ public final class Meters {
     // ---------- Acces au tableau ----------
 
     public static Row find(String key) {
-        return key == null ? null : MAP.get(key);
+        if (key == null) return null;
+        Row r = MAP.get(key);
+        return r != null ? r : OLDKEY.get(key);
+    }
+
+    /** Ancien numero d'un compteur remplace (colonne "Ancien N° Compteur") -> ligne du nouveau compteur. */
+    private static final java.util.concurrent.ConcurrentHashMap<String, Row> OLDKEY =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** Reconstruit les anciens numeros a partir de la colonne du fichier; un numero revendique par deux lignes est ignore. */
+    public static void rebuildAlias() {
+        try {
+            java.util.HashMap<String, Row> tmp = new java.util.HashMap<>();
+            java.util.HashSet<String> dup = new java.util.HashSet<>();
+            for (Row r : ROWS) {
+                if (r.extra) continue;
+                String o = colValue(r, "ANCIEN N COMPTEUR*", "ANCIEN COMPTEUR*", "ANCIEN NUM COMPTEUR*");
+                if (o == null || o.trim().isEmpty()) continue;
+                String k = key(o);
+                if (k.isEmpty() || k.equals(r.key) || MAP.containsKey(k)) continue;
+                if (tmp.containsKey(k) && tmp.get(k) != r) dup.add(k);
+                tmp.put(k, r);
+            }
+            for (String d : dup) tmp.remove(d);
+            OLDKEY.clear();
+            OLDKEY.putAll(tmp);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /** Memorise (en memoire) qu'un numero affiche a l'ecran designe cette ligne (compteur remplace reconnu par le nom). */
+    public static void addAlias(String key, Row r) {
+        if (key == null || key.isEmpty() || r == null || MAP.containsKey(key)) return;
+        OLDKEY.put(key, r);
     }
 
     /**
@@ -742,6 +775,7 @@ public final class Meters {
                 MAP.clear();
                 ROWS.addAll(tmpRows);
                 MAP.putAll(tmpMap);
+                rebuildAlias();
                 lastDup = dup;
                 return ROWS.size();
             }
@@ -855,6 +889,7 @@ public final class Meters {
         MAP.clear();
         ROWS.addAll(tmpRows);
         MAP.putAll(tmpMap);
+        rebuildAlias();
     }
 
     /** Valeur d'une colonne du fichier d'origine, retrouvee par son en-tete (noms avec * = debut). */
@@ -989,8 +1024,27 @@ public final class Meters {
             ArrayList<Row> good = new ArrayList<>();
             for (Row r : cand) if (overlap(ta, tokens(addressOf(r))) >= 0.6) good.add(r);
             if (good.size() == 1) return good.get(0);
+            return null;
         }
-        return null;
+        if (!cand.isEmpty()) return null;
+        // 2e passe, plus souple: au moins 2 mots communs et 75 % du plus petit nom, resultat unique
+        // (nom de famille + prenom avec un mot en plus ou en moins), adresse compatible si elle est connue
+        ArrayList<Row> soft = new ArrayList<>();
+        java.util.HashSet<String> ta2 = (addr == null || addr.trim().isEmpty()) ? null : tokens(addr);
+        for (Row r : ROWS) {
+            if (r.extra) continue;
+            java.util.HashSet<String> rt = rowTokensFast(r);
+            int common = 0;
+            for (String x : tn) if (rt.contains(x)) common++;
+            if (common < 2 || (double) common / Math.min(tn.size(), rt.size()) < 0.75) continue;
+            if (ta2 != null && !ta2.isEmpty()) {
+                java.util.HashSet<String> ra = tokens(addressOf(r));
+                if (!ra.isEmpty() && overlap(ta2, ra) < 0.5) continue;
+            }
+            soft.add(r);
+            if (soft.size() > 1) return null;
+        }
+        return soft.size() == 1 ? soft.get(0) : null;
     }
 
     public static String contractOf(Row r) {
