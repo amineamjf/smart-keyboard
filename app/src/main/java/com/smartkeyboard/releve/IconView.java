@@ -12,7 +12,8 @@ public final class IconView extends View {
 
     public static final int DOWN = 0, FOLDER = 1, FILE = 2, LIST = 3, SHARE = 4, SAVE = 5, GEAR = 6,
             PHONE = 7, MAIL = 8, SIGMA = 9, RESTORE = 10, TABLE = 11, PLAY = 12, HOME = 13, MIC = 14,
-            CAMERA = 15, PIN = 16, CHART = 17, TEXT = 18, KB = 19, BOLT = 20, UP = 21, DN = 22, CHECK = 23, GRID = 24, MORE = 25, SEARCH = 26, BACK = 27, FILTER = 28;
+            CAMERA = 15, PIN = 16, CHART = 17, TEXT = 18, KB = 19, BOLT = 20, UP = 21, DN = 22, CHECK = 23, GRID = 24, MORE = 25, SEARCH = 26, BACK = 27, FILTER = 28,
+            DEL = 29, CHL = 30, CHR = 31, CHEND = 32, ENTER = 33, ARROWR = 34, STOP = 35, UNDO = 36, SHIFT = 37, CLOSE = 38;
 
     private final int type;
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -274,6 +275,83 @@ public final class IconView extends View {
                 line(c, 6, 6, 18, 18);
                 line(c, 9, 18, 18, 18);
                 line(c, 18, 18, 18, 9);
+                break;
+            case DEL:
+                p.setStrokeWidth(2f);
+                path.reset();
+                path.moveTo(21, 5);
+                path.lineTo(9, 5);
+                path.lineTo(3, 12);
+                path.lineTo(9, 19);
+                path.lineTo(21, 19);
+                path.close();
+                c.drawPath(path, p);
+                line(c, 13, 9.5f, 17, 14.5f);
+                line(c, 17, 9.5f, 13, 14.5f);
+                break;
+            case CLOSE:
+                p.setStrokeWidth(2.4f);
+                line(c, 6, 6, 18, 18);
+                line(c, 18, 6, 6, 18);
+                break;
+            case CHL:
+                p.setStrokeWidth(2.6f);
+                line(c, 15, 5, 8, 12);
+                line(c, 8, 12, 15, 19);
+                break;
+            case CHR:
+                p.setStrokeWidth(2.6f);
+                line(c, 9, 5, 16, 12);
+                line(c, 16, 12, 9, 19);
+                break;
+            case CHEND:
+                p.setStrokeWidth(2.6f);
+                line(c, 5, 5, 12, 12);
+                line(c, 12, 12, 5, 19);
+                line(c, 19, 5, 19, 19);
+                break;
+            case ENTER:
+                p.setStrokeWidth(2.4f);
+                line(c, 20, 5, 20, 12);
+                line(c, 20, 12, 5, 12);
+                line(c, 10, 7, 5, 12);
+                line(c, 10, 17, 5, 12);
+                break;
+            case ARROWR:
+                p.setStrokeWidth(2.6f);
+                line(c, 4, 12, 19, 12);
+                line(c, 13, 6, 19, 12);
+                line(c, 13, 18, 19, 12);
+                break;
+            case STOP:
+                p.setStyle(Paint.Style.FILL);
+                rr(c, 6, 6, 18, 18, 2.5f);
+                p.setStyle(Paint.Style.STROKE);
+                break;
+            case UNDO:
+                p.setStrokeWidth(2.3f);
+                line(c, 9, 14, 4, 9);
+                line(c, 4, 9, 9, 4);
+                path.reset();
+                path.moveTo(4, 9);
+                path.lineTo(15, 9);
+                path.quadTo(20, 9, 20, 14);
+                path.quadTo(20, 19, 15, 19);
+                path.lineTo(11, 19);
+                c.drawPath(path, p);
+                break;
+            case SHIFT:
+                p.setStrokeWidth(2.2f);
+                path.reset();
+                path.moveTo(12, 4);
+                path.lineTo(4, 12.5f);
+                path.lineTo(8.5f, 12.5f);
+                path.lineTo(8.5f, 19);
+                path.lineTo(15.5f, 19);
+                path.lineTo(15.5f, 12.5f);
+                path.lineTo(20, 12.5f);
+                path.close();
+                c.drawPath(path, p);
                 break;
             default:
                 break;

@@ -276,6 +276,35 @@ public class KeyboardService extends InputMethodService {
         return b;
     }
 
+    /** Icone dessinee (IconView) rendue en bitmap pour l'afficher au-dessus du texte d'une touche. */
+    private Drawable keyIcon(int type, int color, int sizeDp) {
+        int px = dp(sizeDp);
+        IconView v = new IconView(this, type, color);
+        v.measure(View.MeasureSpec.makeMeasureSpec(px, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(px, View.MeasureSpec.EXACTLY));
+        v.layout(0, 0, px, px);
+        android.graphics.Bitmap bm = android.graphics.Bitmap.createBitmap(px, px, android.graphics.Bitmap.Config.ARGB_8888);
+        v.draw(new android.graphics.Canvas(bm));
+        android.graphics.drawable.BitmapDrawable d = new android.graphics.drawable.BitmapDrawable(getResources(), bm);
+        d.setBounds(0, 0, px, px);
+        return d;
+    }
+
+    /** Touche avec icone au-dessus du libelle (libelle vide: icone seule, centree). */
+    private Button iconTop(Button b, int type, int color, int sizeDp) {
+        b.setCompoundDrawables(null, keyIcon(type, color, sizeDp), null, null);
+        b.setCompoundDrawablePadding(b.getText().length() == 0 ? 0 : dp(1));
+        b.setGravity(Gravity.CENTER);
+        b.setPadding(0, dp(4), 0, dp(4));
+        return b;
+    }
+
+    private Button leftIcon(Button b, int type) {
+        b.setCompoundDrawables(keyIcon(type, 0xFFFFFFFF, 18), null, null, null);
+        b.setCompoundDrawablePadding(dp(4));
+        return b;
+    }
+
     private Button digit(final String k) {
         return makeKey(k, C_KEY, C_KEY_SH, C_TEXT, 30, () -> press(k));
     }
@@ -604,6 +633,7 @@ public class KeyboardService extends InputMethodService {
         try {
             if (stop) {
                 b.setText(stopLabel);
+                iconTop(b, IconView.STOP, 0xFFFFFFFF, 30);
                 b.setBackground(keyBg(C_RED, C_RED_SH));
                 b.animate().cancel();
                 b.setAlpha(1f);
@@ -612,6 +642,7 @@ public class KeyboardService extends InputMethodService {
                 b.animate().cancel();
                 b.setAlpha(1f);
                 b.setText(validLabel);
+                iconTop(b, IconView.ARROWR, 0xFFFFFFFF, 32);
                 b.setBackground(keyBg(C_GREEN, C_GREEN_SH));
             }
         } catch (Throwable t) {
@@ -847,10 +878,7 @@ public class KeyboardService extends InputMethodService {
                     || VoiceStore.get(this).total() == 0) && VoskEngine.installed(this);
         } catch (Throwable ignored) {
         }
-        android.text.SpannableString sp = new android.text.SpannableString("\uD83C\uDFA4\n" + (frMode ? "FR" : "DA"));
-        sp.setSpan(new android.text.style.RelativeSizeSpan(0.55f), 2, sp.length(),
-                android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        return sp;
+        return frMode ? "FR" : "DA";
     }
 
     /** Premier usage du francais: telechargement unique du modele (internet requis une seule fois). */
@@ -1465,11 +1493,11 @@ public class KeyboardService extends InputMethodService {
         }
         LinearLayout last = new LinearLayout(this);
         last.setOrientation(LinearLayout.HORIZONTAL);
-        last.addView(makeKey("\u2715\nEffacer tout", C_DARK, C_DARK_SH, C_TEXT, 12,
-                () -> clearAll()), lp(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
+        last.addView(iconTop(makeKey("Effacer tout", C_DARK, C_DARK_SH, C_TEXT, 11,
+                () -> clearAll()), IconView.CLOSE, C_TEXT, 22), lp(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
         last.addView(digit("0"), lp(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
-        last.addView(makeKey("\u232B\nEffacer", C_DARK, C_DARK_SH, C_TEXT, 12,
-                () -> press("<")), lp(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
+        last.addView(iconTop(makeKey("Effacer", C_DARK, C_DARK_SH, C_TEXT, 11,
+                () -> press("<")), IconView.DEL, C_TEXT, 22), lp(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
         left.addView(last, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
@@ -1477,12 +1505,9 @@ public class KeyboardService extends InputMethodService {
         LinearLayout right = new LinearLayout(this);
         right.setOrientation(LinearLayout.VERTICAL);
 
-        SpannableString valider = new SpannableString("\u2192\nVALIDER\nL'INDEX");
-        valider.setSpan(new RelativeSizeSpan(2f), 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        CharSequence valider = "VALIDER\nL'INDEX";
         validLabel = valider;
-        SpannableString stopTxt = new SpannableString("\u25A0\nSTOP\nAUTO");
-        stopTxt.setSpan(new RelativeSizeSpan(2f), 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        stopLabel = stopTxt;
+        stopLabel = "STOP\nAUTO";
         validBtn = makeKey(valider, C_GREEN, C_GREEN_SH, 0xFFFFFFFF, 13, () -> {
             if (ScanService.autoRunning) {
                 if (ScanService.instance != null) ScanService.instance.stopAll();
@@ -1506,17 +1531,17 @@ public class KeyboardService extends InputMethodService {
         srow.setOrientation(LinearLayout.HORIZONTAL);
         srow.addView(modernKey("Rechercher", 0xFF2F66F0, 0xFF1D4ED8, () -> search()),
                 lp(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
-        srow.addView(modernKey("\u21A9 Dernier", 0xFF1E3A8A, 0xFF12286B, () -> openLastSent()),
+        srow.addView(leftIcon(modernKey("Dernier", 0xFF1E3A8A, 0xFF12286B, () -> openLastSent()), IconView.UNDO),
                 lp(0, ViewGroup.LayoutParams.MATCH_PARENT, 0.62f));
         right.addView(srow, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         LinearLayout mid = new LinearLayout(this);
         mid.setOrientation(LinearLayout.HORIZONTAL);
-        mid.addView(makeKey("\u2699\nOPTIONS", C_LIGHT, C_LIGHT_SH, C_TEXT, 11,
-                () -> setInputView(buildOptions())),
+        mid.addView(iconTop(makeKey("OPTIONS", C_LIGHT, C_LIGHT_SH, C_TEXT, 11,
+                () -> setInputView(buildOptions())), IconView.FILTER, C_TEXT, 22),
                 lp(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
-        final Button micKey = makeKey(micLabel(), C_TEAL, C_TEAL_SH, 0xFFFFFFFF, 18, () -> onMic());
+        final Button micKey = iconTop(makeKey(micLabel(), C_TEAL, C_TEAL_SH, 0xFFFFFFFF, 12, () -> onMic()), IconView.MIC, 0xFFFFFFFF, 28);
         micKey.setOnLongClickListener(v -> {
             boolean want;
             try {
@@ -1540,8 +1565,8 @@ public class KeyboardService extends InputMethodService {
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         // Bouton libre pour plus tard (aucune action pour l'instant)
-        right.addView(makeKey("ABC\nFR / \u0639", C_LIGHT, C_LIGHT_SH, C_TEXT, 12,
-                () -> setInputView(buildLetters())),
+        right.addView(iconTop(makeKey("ABC  FR / \u0639", C_LIGHT, C_LIGHT_SH, C_TEXT, 12,
+                () -> setInputView(buildLetters())), IconView.KB, C_TEXT, 22),
                 lp(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         root.addView(left, new LinearLayout.LayoutParams(0, totalH, 3f));
@@ -1695,7 +1720,7 @@ public class KeyboardService extends InputMethodService {
             r4.addView(makeKey(t, C_KEY, C_KEY_SH, C_TEXT, 19, () -> typeLetter(t)),
                     lpT(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
         }
-        r4.addView(makeKey("\u232B", C_DARK, C_DARK_SH, C_TEXT, 20, () -> deleteLetter()),
+        r4.addView(iconTop(makeKey("", C_DARK, C_DARK_SH, C_TEXT, 20, () -> deleteLetter()), IconView.DEL, C_TEXT, 26),
                 lpT(0, ViewGroup.LayoutParams.MATCH_PARENT, 1.4f));
         root.addView(r4, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
@@ -1731,8 +1756,8 @@ public class KeyboardService extends InputMethodService {
             r5.addView(makeKey("\uD83D\uDD0D", C_TEAL, C_TEAL_SH, 0xFFFFFFFF, 18, () -> search()),
                     lpT(0, ViewGroup.LayoutParams.MATCH_PARENT, 1.2f));
         }
-        r5.addView(makeKey("\u21B5", discreet ? C_DARK : C_GREEN, discreet ? C_DARK_SH : C_GREEN_SH,
-                discreet ? C_TEXT : 0xFFFFFFFF, 22, () -> pressEnter()),
+        r5.addView(iconTop(makeKey("", discreet ? C_DARK : C_GREEN, discreet ? C_DARK_SH : C_GREEN_SH,
+                discreet ? C_TEXT : 0xFFFFFFFF, 22, () -> pressEnter()), IconView.ENTER, discreet ? C_TEXT : 0xFFFFFFFF, 26),
                 lpT(0, ViewGroup.LayoutParams.MATCH_PARENT, 1.4f));
         root.addView(r5, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
