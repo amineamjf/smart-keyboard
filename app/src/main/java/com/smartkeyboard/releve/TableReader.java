@@ -132,11 +132,163 @@ public final class TableReader {
                 else sheets.put(name, bo.toByteArray());
             }
         }
-        List<String> sst = sstData == null ? new ArrayList<String>() : sharedStrings(sstData);
+        List<String> sst;
+        if (sstData == null) {
+            sst = new ArrayList<String>();
+        } else {
+            try {
+                sst = sharedStrings(sstData);
+            } catch (Throwable e1) {
+                try {
+                    sst = sharedStrings(clean(sstData));
+                } catch (Throwable e2) {
+                    sst = sharedStringsLoose(sstData);
+                }
+            }
+        }
         for (Map.Entry<String, byte[]> en : sheets.entrySet()) {
-            out.add(sheet(en.getValue(), sst));
+            List<String[]> rows;
+            try {
+                rows = sheet(en.getValue(), sst);
+            } catch (Throwable e1) {
+                try {
+                    rows = sheet(clean(en.getValue()), sst);
+                } catch (Throwable e2) {
+                    rows = sheetLoose(en.getValue(), sst);
+                }
+            }
+            out.add(rows);
         }
         if (out.isEmpty()) throw new Exception("Aucune feuille dans le fichier");
+    }
+
+    /** Retire les caracteres interdits en XML 1.0 (controles, U+FFFE/FFFF, substituts isoles) et le BOM. */
+    static byte[] clean(byte[] data) {
+        String t = new String(data, java.nio.charset.StandardCharsets.UTF_8);
+        StringBuilder sb = new StringBuilder(t.length());
+        for (int i = 0; i < t.length(); i++) {
+            char c = t.charAt(i);
+            if (c == 0xFEFF && i == 0) continue;
+            if (c == 0x9 || c == 0xA || c == 0xD || (c >= 0x20 && c <= 0xD7FF)
+                    || (c >= 0xE000 && c <= 0xFFFD)) {
+                sb.append(c);
+            } else if (Character.isHighSurrogate(c) && i + 1 < t.length()
+                    && Character.isLowSurrogate(t.charAt(i + 1))) {
+                sb.append(c).append(t.charAt(i + 1));
+                i++;
+            } else {
+                sb.append(' ');
+            }
+        }
+        // references numeriques interdites (&#0; &#x1F; ...)
+        String r = sb.toString().replaceAll("&#(x0*[0-9a-fA-F]|0*[0-9]|0*1[0-9]|0*2[0-9]|0*3[01]|x0*1[0-9a-fA-F]);", " ");
+        // declaration DOCTYPE eventuelle: la supprimer (entites externes)
+        r = r.replaceAll("(?s)<!DOCTYPE[^>]*(\\[.*?\\])?>", "");
+        return r.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    private static String unesc(String v) {
+        if (v.indexOf('&') < 0) return v;
+        StringBuilder sb = new StringBuilder();
+        int i = 0;
+        while (i < v.length()) {
+            char c = v.charAt(i);
+            int semi = c == '&' ? v.indexOf(';', i) : -1;
+            if (semi > i && semi - i <= 10) {
+                String e = v.substring(i + 1, semi);
+                String rep = null;
+                if (e.equals("amp")) rep = "&";
+                else if (e.equals("lt")) rep = "<";
+                else if (e.equals("gt")) rep = ">";
+                else if (e.equals("quot")) rep = "\"";
+                else if (e.equals("apos")) rep = "'";
+                else if (e.startsWith("#")) {
+                    try {
+                        int cp = e.startsWith("#x") || e.startsWith("#X")
+                                ? Integer.parseInt(e.substring(2), 16) : Integer.parseInt(e.substring(1));
+                        rep = cp >= 32 || cp == 9 || cp == 10 || cp == 13 ? new String(Character.toChars(cp)) : "";
+                    } catch (Exception ex) {
+                        rep = "";
+                    }
+                }
+                if (rep != null) {
+                    sb.append(rep);
+                    i = semi + 1;
+                    continue;
+                }
+            }
+            sb.append(c);
+            i++;
+        }
+        return sb.toString();
+    }
+
+    private static String textOfXml(String frag) {
+        StringBuilder sb = new StringBuilder();
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile(
+                "<t(?:\\s[^>]*)?>(.*?)</t>", java.util.regex.Pattern.DOTALL).matcher(frag);
+        while (m.find()) sb.append(unesc(m.group(1)));
+        return sb.toString();
+    }
+
+    /** Lecture sans analyseur XML: dernier recours si le fichier n'est pas du XML valide. */
+    private static List<String> sharedStringsLoose(byte[] data) {
+        String x = new String(data, java.nio.charset.StandardCharsets.UTF_8);
+        ArrayList<String> out = new ArrayList<>();
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile(
+                "<si(?:\\s[^>]*)?>(.*?)</si>", java.util.regex.Pattern.DOTALL).matcher(x);
+        while (m.find()) out.add(textOfXml(m.group(1).replaceAll("(?s)<rPh.*?</rPh>", "")));
+        return out;
+    }
+
+    private static List<String[]> sheetLoose(byte[] data, List<String> sst) {
+        String x = new String(data, java.nio.charset.StandardCharsets.UTF_8);
+        ArrayList<String[]> rows = new ArrayList<>();
+        java.util.regex.Matcher rm = java.util.regex.Pattern.compile(
+                "<row(?:\\s[^>]*)?>(.*?)</row>", java.util.regex.Pattern.DOTALL).matcher(x);
+        java.util.regex.Pattern cp = java.util.regex.Pattern.compile(
+                "<c((?:\\s[^>]*?)?)(?:/>|>(.*?)</c>)", java.util.regex.Pattern.DOTALL);
+        java.util.regex.Pattern ap = java.util.regex.Pattern.compile("(\\w+)=\"([^\"]*)\"");
+        while (rm.find()) {
+            ArrayList<String> cells = new ArrayList<>();
+            int next = 0;
+            java.util.regex.Matcher cm = cp.matcher(rm.group(1));
+            while (cm.find()) {
+                String ref = "", type = "";
+                java.util.regex.Matcher am = ap.matcher(cm.group(1) == null ? "" : cm.group(1));
+                while (am.find()) {
+                    if (am.group(1).equals("r")) ref = am.group(2);
+                    else if (am.group(1).equals("t")) type = am.group(2);
+                }
+                String body = cm.group(2) == null ? "" : cm.group(2);
+                String val;
+                if (type.equals("inlineStr")) {
+                    val = textOfXml(body);
+                } else {
+                    java.util.regex.Matcher vm = java.util.regex.Pattern.compile(
+                            "<v(?:\\s[^>]*)?>(.*?)</v>", java.util.regex.Pattern.DOTALL).matcher(body);
+                    String raw = vm.find() ? unesc(vm.group(1)) : "";
+                    if (type.equals("s")) {
+                        try {
+                            val = sst.get(Integer.parseInt(raw.trim()));
+                        } catch (Exception e) {
+                            val = "";
+                        }
+                    } else if (type.equals("str")) {
+                        val = raw;
+                    } else {
+                        val = Meters.cleanNumber(raw);
+                    }
+                }
+                int col = ref.length() > 0 ? colIndex(ref) : next;
+                if (col < 0) col = next;
+                while (cells.size() <= col) cells.add("");
+                cells.set(col, val);
+                next = col + 1;
+            }
+            rows.add(cells.toArray(new String[0]));
+        }
+        return rows;
     }
 
     private static List<String> sharedStrings(byte[] data) throws Exception {

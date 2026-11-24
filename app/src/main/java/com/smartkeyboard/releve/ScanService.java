@@ -1080,6 +1080,8 @@ public class ScanService extends AccessibilityService {
         }
         busy = true;
         subPhase = 1;
+        subOkTries = 0;
+        subOkT = 0;
         subPhaseT = SystemClock.uptimeMillis();
         subTaps = 1;
         subTapT = subPhaseT;
@@ -1089,6 +1091,8 @@ public class ScanService extends AccessibilityService {
         return true;
     }
 
+    private long subOkT = 0;
+    private int subOkTries = 0;
     private boolean subDirect = false;
     private int sub2Taps = 0;
     private long sub2TapT = 0;
@@ -1144,15 +1148,30 @@ public class ScanService extends AccessibilityService {
             }
             if (subPhase == 1) {
                 if (dialog != null) {
-                    AccessibilityNodeInfo ok = findExact(root, "Ok", 0);
-                    if (ok != null) {
-                        boolean t = tapNode(ok);
-                        log("message: Ok touche (" + t + ")");
-                        subPhase = 2;
-                        subPhaseT = now;
-                        handler.postDelayed(submitStep, d(250));
+                    if (now - subOkT > 700) {
+                        subOkT = now;
+                        subOkTries++;
+                        pressOk(root, dialog);
+                        if (subOkTries == 1) {
+                            StringBuilder dsb = new StringBuilder();
+                            dump(root, 0, dsb);
+                            log("ARBRE message:\n" + dsb);
+                        }
+                    }
+                    // le message reste affiche: on retouche Ok quelques fois avant d'abandonner
+                    if (subOkTries > 8) {
+                        finish("STOP: message impossible a fermer (Ok)");
                         return;
                     }
+                    handler.postDelayed(submitStep, POLL);
+                    return;
+                } else if (subOkTries > 0) {
+                    // message ferme: on passe a la ressaisie
+                    subOkTries = 0;
+                    subPhase = 2;
+                    subPhaseT = now;
+                    handler.postDelayed(submitStep, d(250));
+                    return;
                 } else if (meter.length() > 0 && !meter.equals(subMeter)) {
                     finish("FIN OK: compteur suivant apres une seule validation");
                     return;
@@ -4854,6 +4873,50 @@ public class ScanService extends AccessibilityService {
             if (r != null) return r;
         }
         return null;
+    }
+
+    /** Bouton de fermeture d'un message (Ok / OK. / D'accord...): texte, description ou identifiant. */
+    private AccessibilityNodeInfo findOkButton(AccessibilityNodeInfo n, int depth) {
+        if (n == null || depth > 30) return null;
+        String t = n.getText() == null ? "" : n.getText().toString().trim();
+        String d = n.getContentDescription() == null ? "" : n.getContentDescription().toString().trim();
+        String id = n.getViewIdResourceName() == null ? "" : n.getViewIdResourceName().toLowerCase();
+        String[] a = {t, d};
+        for (String x : a) {
+            String k = x.toLowerCase().replace(".", "").replace("!", "").trim();
+            if (k.equals("ok") || k.equals("oui") || k.equals("d'accord") || k.equals("d\u2019accord")
+                    || k.equals("fermer") || k.equals("compris") || k.equals("\u0645\u0648\u0627\u0641\u0642")
+                    || k.equals("\u062D\u0633\u0646\u0627")) return n;
+        }
+        if (id.contains("confirm") || id.endsWith("btn_ok") || id.contains("positive")
+                || id.contains("swal") && id.contains("ok")) return n;
+        for (int i = 0; i < n.getChildCount(); i++) {
+            AccessibilityNodeInfo r = findOkButton(n.getChild(i), depth + 1);
+            if (r != null) return r;
+        }
+        return null;
+    }
+
+    /** Touche le bouton Ok du message: geste, puis clic accessibilite, puis parent cliquable. */
+    private boolean pressOk(AccessibilityNodeInfo root, AccessibilityNodeInfo alert) {
+        AccessibilityNodeInfo ok = findOkButton(root, 0);
+        if (ok == null) {
+            if (alert != null) {
+                // dernier recours: le bouton est sous le texte du message, centre horizontalement
+                Rect r = new Rect();
+                alert.getBoundsInScreen(r);
+                DisplayMetrics dm = dm();
+                boolean g = tapAbs(Math.min(dm.widthPixels * 0.5f, Math.max(r.centerX(), dm.widthPixels * 0.35f)),
+                        Math.min(dm.heightPixels * 0.95f, r.bottom + dm.heightPixels * 0.09f));
+                log("message: bouton Ok introuvable, toucher sous le texte (" + g + ")");
+                return g;
+            }
+            return false;
+        }
+        boolean t = tapNode(ok);
+        if (!t) t = clickUp(ok);
+        log("message: Ok touche (" + t + ")");
+        return t;
     }
 
     private AccessibilityNodeInfo findText(AccessibilityNodeInfo n, String s, int depth) {

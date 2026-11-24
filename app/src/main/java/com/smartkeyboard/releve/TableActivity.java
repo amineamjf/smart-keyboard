@@ -774,18 +774,41 @@ public class TableActivity extends Activity {
     }
 
     private void runVerif(final Uri uri) {
+        Toast.makeText(this, "Lecture du fichier...", Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            try {
+                AnomalyEngine.Scan sc;
+                try (java.io.InputStream in = getContentResolver().openInputStream(uri)) {
+                    sc = AnomalyEngine.scan(in);
+                }
+                if (sc.pairs.isEmpty()) throw new Exception(sc.why);
+                final AnomalyEngine.Scan fsc = sc;
+                final int anomalies = AnomalyReport.countAnomalies(sc.pairs);
+                runOnUiThread(() -> askVerifMode(fsc, anomalies));
+            } catch (Throwable e) {
+                final String m = "Fichier non lu : " + (e.getMessage() == null ? e.toString() : e.getMessage());
+                runOnUiThread(() -> new AlertDialog.Builder(TableActivity.this).setTitle("V\u00E9rification impossible")
+                        .setMessage(m).setPositiveButton("OK", null).show());
+            }
+        }).start();
+    }
+
+    /** Montre ce qui a ete detecte puis laisse choisir: tout analyser, ou seulement les anomalies. */
+    private void askVerifMode(final AnomalyEngine.Scan sc, int anomalies) {
+        String msg = sc.pairs.size() + " ligne(s) lue(s)\n" + sc.desc + "\n\n" + sc.matched + " reconnue(s) dans le tableau"
+                + "\n" + anomalies + " \u00E0 v\u00E9rifier (anomalies ou non reconnues)"
+                + (sc.skipped > 0 ? "\n" + sc.skipped + " ligne(s) ignor\u00E9e(s) (titres ou valeurs non valides)" : "");
+        new AlertDialog.Builder(this).setTitle("Fichier d\u00E9tect\u00E9").setMessage(msg)
+                .setPositiveButton("Anomalies seulement", (dlg, w) -> buildVerif(sc, true))
+                .setNeutralButton("Tout analyser", (dlg, w) -> buildVerif(sc, false))
+                .setNegativeButton("Annuler", null).show();
+    }
+
+    private void buildVerif(final AnomalyEngine.Scan sc, final boolean only) {
         Toast.makeText(this, "Analyse en cours...", Toast.LENGTH_SHORT).show();
         new Thread(() -> {
             try {
-                java.util.ArrayList<String[]> pairs;
-                try (java.io.InputStream in = getContentResolver().openInputStream(uri)) {
-                    pairs = AnomalyEngine.readInput(in);
-                }
-                if (pairs.isEmpty()) {
-                    throw new Exception("colonnes \u00AB Contrat \u00BB et \u00AB N\u00B0 Compteur \u00BB introuvables dans ce fichier ("
-                            + AnomalyEngine.lastSheets + "). Choisissez un fichier avec deux colonnes: contrat et compteur.");
-                }
-                byte[] data = AnomalyReport.build(pairs);
+                byte[] data = AnomalyReport.build(sc.pairs, only);
                 final String name = "verification-anomalies-" + today() + ".xlsx";
                 java.io.File dir = new java.io.File(getCacheDir(), "share");
                 if (!dir.exists()) dir.mkdirs();
@@ -795,12 +818,12 @@ public class TableActivity extends Activity {
                     fo.write(data);
                 }
                 final Uri u = ShareProvider.uriFor(name);
-                final int n = pairs.size();
-                final int sk = AnomalyEngine.lastSkipped;
-                runOnUiThread(() -> askVerifResult(u, name, n, sk));
+                final int n = sc.pairs.size();
+                runOnUiThread(() -> askVerifResult(u, name, n, sc.skipped));
             } catch (Throwable e) {
-                final String m = "Echec: " + e;
-                runOnUiThread(() -> Toast.makeText(TableActivity.this, m, Toast.LENGTH_LONG).show());
+                final String m = e.getMessage() == null ? e.toString() : e.getMessage();
+                runOnUiThread(() -> new AlertDialog.Builder(TableActivity.this).setTitle("Rapport non cr\u00E9\u00E9")
+                        .setMessage(m).setPositiveButton("OK", null).show());
             }
         }).start();
     }

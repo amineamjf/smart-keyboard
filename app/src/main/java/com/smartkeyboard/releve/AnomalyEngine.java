@@ -257,6 +257,138 @@ final class AnomalyEngine {
         return digits >= 3;
     }
 
+    /** Resultat de la lecture d'un fichier: couples (contrat, compteur) et description des colonnes retenues. */
+    static final class Scan {
+        ArrayList<String[]> pairs = new ArrayList<>();
+        int skipped, matched;
+        String desc = "", why = "";
+    }
+
+    private static String colName(int j) {
+        StringBuilder b = new StringBuilder();
+        for (int k = j; k >= 0; k = k / 26 - 1) b.insert(0, (char) ('A' + k % 26));
+        return b.toString();
+    }
+
+    /** Un en-tete peut-il etre « contrat » / « compteur »? (aide secondaire; la detection se fait surtout sur le contenu) */
+    private static int headerKind(String raw) {
+        String n = Meters.norm(raw == null ? "" : raw);
+        if (n.contains("COMPTEUR") && !n.contains("ANCIEN")) return 2;
+        if (n.contains("CONTRAT") || n.startsWith("N CLIENT") || n.equals("CLIENT") || n.contains("POLICE") || n.contains("ABONN")) return 1;
+        return 0;
+    }
+
+    /**
+     * Lit N'IMPORTE QUEL fichier (xlsx, xls, csv): pour chaque colonne de chaque feuille, compte les valeurs qui
+     * existent dans le tableau (comme compteur ou comme contrat) et retient les meilleures colonnes. Les en-tetes
+     * ne servent qu'en appoint, au cas ou rien n'est reconnu.
+     */
+    static Scan scan(java.io.InputStream in) throws Exception {
+        List<List<String[]>> sheets = TableReader.read(in);
+        HashMap<String, Meters.Row> byC = indexByContrat();
+        Scan best = null;
+        double bestScore = -1;
+        int totalRows = 0;
+        for (List<String[]> rows : sheets) {
+            totalRows += rows.size();
+            int ncol = 0;
+            for (String[] r : rows) ncol = Math.max(ncol, r.length);
+            if (rows.isEmpty() || ncol == 0) continue;
+            int[] hitM = new int[ncol], hitC = new int[ncol], plaus = new int[ncol];
+            int hdrRow = -1;
+            int[] hk = new int[ncol];
+            for (int i = 0; i < rows.size(); i++) {
+                String[] r = rows.get(i);
+                for (int j = 0; j < r.length; j++) {
+                    String v = clean(r[j]);
+                    if (i < 15) {
+                        int k = headerKind(v);
+                        if (k > 0 && hk[j] == 0) {
+                            hk[j] = k;
+                            hdrRow = Math.max(hdrRow, i);
+                        }
+                    }
+                    if (!plausibleId(v)) continue;
+                    plaus[j]++;
+                    if (Meters.find(Meters.key(v)) != null) hitM[j]++;
+                    if (byC.containsKey(Meters.key(v))) hitC[j]++;
+                }
+            }
+            int cM = -1, cC = -1;
+            double rM = 0, rC = 0;
+            for (int j = 0; j < ncol; j++) {
+                if (plaus[j] == 0) continue;
+                double m = hitM[j] / (double) plaus[j], c = hitC[j] / (double) plaus[j];
+                if (hitM[j] > 0 && m >= 0.2 && m > rM) {
+                    rM = m;
+                    cM = j;
+                }
+            }
+            for (int j = 0; j < ncol; j++) {
+                if (j == cM || plaus[j] == 0) continue;
+                double c = hitC[j] / (double) plaus[j];
+                if (hitC[j] > 0 && c >= 0.2 && c > rC) {
+                    rC = c;
+                    cC = j;
+                }
+            }
+            // appoint: en-tetes, si le contenu n'a rien donne
+            if (cM < 0 || cC < 0) {
+                for (int j = 0; j < ncol; j++) {
+                    if (cM < 0 && hk[j] == 2 && plaus[j] > 0) cM = j;
+                    else if (cC < 0 && hk[j] == 1 && plaus[j] > 0 && j != cM) cC = j;
+                }
+            }
+            if (cM < 0 && cC < 0) continue;
+            Scan sc = new Scan();
+            for (int i = 0; i < rows.size(); i++) {
+                String[] r = rows.get(i);
+                String c = cC >= 0 && cC < r.length ? clean(r[cC]) : "";
+                String m = cM >= 0 && cM < r.length ? clean(r[cM]) : "";
+                boolean okC = cC < 0 || c.isEmpty() || plausibleId(c), okM = cM < 0 || m.isEmpty() || plausibleId(m);
+                if (c.isEmpty() && m.isEmpty()) continue;
+                if (!okC || !okM) {
+                    sc.skipped++;
+                    continue;
+                }
+                sc.pairs.add(new String[]{c, m});
+                if ((!m.isEmpty() && Meters.find(Meters.key(m)) != null) || (!c.isEmpty() && byC.containsKey(Meters.key(c)))) sc.matched++;
+            }
+            if (sc.pairs.isEmpty()) continue;
+            String hc = cC >= 0 ? headerOf(rows, cC) : "", hm = cM >= 0 ? headerOf(rows, cM) : "";
+            sc.desc = "Contrat : " + (cC >= 0 ? "colonne " + colName(cC) + (hc.isEmpty() ? "" : " \u00AB " + hc + " \u00BB") : "non trouv\u00E9")
+                    + "\nCompteur : " + (cM >= 0 ? "colonne " + colName(cM) + (hm.isEmpty() ? "" : " \u00AB " + hm + " \u00BB") : "non trouv\u00E9");
+            double score = sc.matched * 10.0 + sc.pairs.size() * 0.001;
+            if (score > bestScore) {
+                bestScore = score;
+                best = sc;
+            }
+        }
+        if (best != null) return best;
+        // dernier recours: deux premieres colonnes plausibles
+        for (List<String[]> rows : sheets) {
+            ArrayList<String[]> out = collect(rows, 0, 0, 1);
+            if (!out.isEmpty()) {
+                Scan sc = new Scan();
+                sc.pairs = out;
+                sc.skipped = lastSkipped;
+                sc.desc = "Contrat : colonne A\nCompteur : colonne B\n(aucune valeur trouv\u00E9e dans le tableau, v\u00E9rifiez les colonnes)";
+                return sc;
+            }
+        }
+        Scan none = new Scan();
+        none.why = "aucun num\u00E9ro de contrat ou de compteur trouv\u00E9 dans ce fichier (" + sheets.size() + " feuille(s), " + totalRows + " lignes)";
+        return none;
+    }
+
+    private static String headerOf(List<String[]> rows, int j) {
+        for (int i = 0; i < Math.min(15, rows.size()); i++) {
+            String[] r = rows.get(i);
+            if (j < r.length && r[j] != null && !r[j].trim().isEmpty() && !plausibleId(r[j])) return r[j].trim();
+        }
+        return "";
+    }
+
     /** Dernier fichier lu: nombre de lignes ignorees et feuilles examinees (pour un message clair). */
     static int lastSkipped;
     static String lastSheets = "";

@@ -46,14 +46,32 @@ final class AnomalyReport {
     }
 
     static byte[] build(List<String[]> pairs) throws Exception {
-        return new AnomalyReport().make(pairs);
+        return new AnomalyReport().make(pairs, false);
     }
 
-    private byte[] make(List<String[]> pairs) throws Exception {
+    /** onlyAnomalies: ne garde que les lignes a verifier (priorite urgent ou a revoir, et non reconnus). */
+    static byte[] build(List<String[]> pairs, boolean onlyAnomalies) throws Exception {
+        return new AnomalyReport().make(pairs, onlyAnomalies);
+    }
+
+    /** Nombre de lignes a verifier parmi les couples (pour proposer le filtre). */
+    static int countAnomalies(List<String[]> pairs) {
+        List<Integer> months = AnomalyEngine.lastMonths();
+        HashMap<String, Meters.Row> byC = AnomalyEngine.indexByContrat();
+        int n = 0;
+        for (String[] p : pairs) if (AnomalyEngine.analysePair(p[0], p[1], months, byC).prio < 3) n++;
+        return n;
+    }
+
+    private byte[] make(List<String[]> pairs, boolean onlyAnomalies) throws Exception {
         List<Integer> months = AnomalyEngine.lastMonths();
         HashMap<String, Meters.Row> byC = AnomalyEngine.indexByContrat();
         ArrayList<AnomalyEngine.Res> all = new ArrayList<>();
-        for (String[] p : pairs) all.add(AnomalyEngine.analysePair(p[0], p[1], months, byC));
+        for (String[] p : pairs) {
+            AnomalyEngine.Res a = AnomalyEngine.analysePair(p[0], p[1], months, byC);
+            if (!onlyAnomalies || a.prio < 3) all.add(a);
+        }
+        if (all.isEmpty()) throw new Exception("aucune anomalie trouv\u00E9e parmi les " + pairs.size() + " lignes");
         // tri: urgent d'abord, puis tournee, puis client
         Collections.sort(all, (a, b) -> {
             if (a.prio != b.prio) return a.prio - b.prio;
