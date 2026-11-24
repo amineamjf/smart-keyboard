@@ -132,11 +132,53 @@ public final class TableReader {
                 else sheets.put(name, bo.toByteArray());
             }
         }
-        List<String> sst = sstData == null ? new ArrayList<String>() : sharedStrings(sstData);
-        for (Map.Entry<String, byte[]> en : sheets.entrySet()) {
-            out.add(sheet(en.getValue(), sst));
+        List<String> sst = new ArrayList<String>();
+        if (sstData != null) {
+            try {
+                sst = sharedStrings(sstData);
+            } catch (Exception ex) {
+                sst = sharedStrings(cleanXml(sstData));
+            }
         }
-        if (out.isEmpty()) throw new Exception("Aucune feuille dans le fichier");
+        Exception first = null;
+        for (Map.Entry<String, byte[]> en : sheets.entrySet()) {
+            List<String[]> rows;
+            try {
+                rows = sheet(en.getValue(), sst);
+            } catch (Exception ex) {
+                // fichier XML abime (caracteres illegaux...) : on nettoie et on reessaie
+                try {
+                    rows = sheet(cleanXml(en.getValue()), sst);
+                } catch (Exception ex2) {
+                    if (first == null) first = ex2;
+                    continue; // une feuille illisible (ex. Analyse) ne bloque pas les autres
+                }
+            }
+            out.add(rows);
+        }
+        if (out.isEmpty()) {
+            if (first != null) throw first;
+            throw new Exception("Aucune feuille dans le fichier");
+        }
+    }
+
+    /** Retire les caracteres interdits en XML 1.0 (controles, U+FFFE/FFFF, substituts isoles). */
+    private static byte[] cleanXml(byte[] data) {
+        String s = new String(data, java.nio.charset.StandardCharsets.UTF_8);
+        StringBuilder b = new StringBuilder(s.length());
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (Character.isHighSurrogate(c)) {
+                if (i + 1 < s.length() && Character.isLowSurrogate(s.charAt(i + 1))) {
+                    b.append(c).append(s.charAt(++i));
+                }
+            } else if (Character.isLowSurrogate(c)) {
+                // isole : ignore
+            } else if (c == 0x9 || c == 0xA || c == 0xD || (c >= 0x20 && c <= 0xFFFD)) {
+                b.append(c);
+            }
+        }
+        return b.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
     }
 
     private static List<String> sharedStrings(byte[] data) throws Exception {
