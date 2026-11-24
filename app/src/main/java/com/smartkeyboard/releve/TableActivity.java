@@ -35,6 +35,7 @@ public class TableActivity extends Activity {
     private static final int REQ_LOG = 16;
     private static final int REQ_LOGF = 17;
     private static final int REQ_VERIF = 22;
+    private static final int REQ_VERIF_SAVE = 23;
     private static final int F_ALL = 0, F_SENT = 1, F_ORANGE = 2, F_ERR = 3, F_NEW = 4, F_UNL = 5, F_OUT = 6, F_PHOTO = 7, F_HIGH = 8, F_NEG = 9, F_SKIP = 10;
 
     private final ArrayList<Meters.Row> shown = new ArrayList<>();
@@ -773,16 +774,73 @@ public class TableActivity extends Activity {
     }
 
     private void runVerif(final Uri uri) {
-        shareBuilt("verification-anomalies-" + today() + ".xlsx",
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", () -> {
-                    java.util.ArrayList<String[]> pairs;
-                    try (java.io.InputStream in = getContentResolver().openInputStream(uri)) {
-                        pairs = AnomalyEngine.readInput(in);
-                    }
-                    if (pairs.isEmpty()) throw new Exception("aucune ligne (contrat, compteur) dans le fichier");
-                    return AnomalyReport.build(pairs);
-                });
+        Toast.makeText(this, "Analyse en cours...", Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            try {
+                java.util.ArrayList<String[]> pairs;
+                try (java.io.InputStream in = getContentResolver().openInputStream(uri)) {
+                    pairs = AnomalyEngine.readInput(in);
+                }
+                if (pairs.isEmpty()) throw new Exception("aucune ligne (contrat, compteur) dans le fichier");
+                byte[] data = AnomalyReport.build(pairs);
+                final String name = "verification-anomalies-" + today() + ".xlsx";
+                java.io.File dir = new java.io.File(getCacheDir(), "share");
+                if (!dir.exists()) dir.mkdirs();
+                java.io.File[] old = dir.listFiles();
+                if (old != null) for (java.io.File o : old) o.delete();
+                try (java.io.FileOutputStream fo = new java.io.FileOutputStream(new java.io.File(dir, name))) {
+                    fo.write(data);
+                }
+                final Uri u = ShareProvider.uriFor(name);
+                final int n = pairs.size();
+                runOnUiThread(() -> askVerifResult(u, name, n));
+            } catch (Throwable e) {
+                final String m = "Echec: " + e;
+                runOnUiThread(() -> Toast.makeText(TableActivity.this, m, Toast.LENGTH_LONG).show());
+            }
+        }).start();
     }
+
+    /** Rapport pret: l'utilisateur choisit (rien n'est envoye automatiquement). */
+    private void askVerifResult(final Uri u, final String name, int n) {
+        final String mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+        new AlertDialog.Builder(this).setTitle("Rapport pr\u00EAt")
+                .setMessage(n + " compteur(s) analys\u00E9(s).\n" + name)
+                .setPositiveButton("Ouvrir", (dlg, w) -> {
+                    try {
+                        Intent i = new Intent(Intent.ACTION_VIEW);
+                        i.setDataAndType(u, mime);
+                        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        startActivity(i);
+                    } catch (Throwable e) {
+                        Toast.makeText(this, "Aucune application pour ouvrir un fichier Excel. Utilisez Partager ou Enregistrer.",
+                                Toast.LENGTH_LONG).show();
+                    }
+                })
+                .setNeutralButton("Enregistrer", (dlg, w) -> {
+                    pendingVerif = u;
+                    Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                    i.addCategory(Intent.CATEGORY_OPENABLE);
+                    i.setType(mime);
+                    i.putExtra(Intent.EXTRA_TITLE, name);
+                    startActivityForResult(i, REQ_VERIF_SAVE);
+                })
+                .setNegativeButton("Partager", (dlg, w) -> {
+                    try {
+                        Intent i = new Intent(Intent.ACTION_SEND);
+                        i.setType(mime);
+                        i.putExtra(Intent.EXTRA_STREAM, u);
+                        i.putExtra(Intent.EXTRA_SUBJECT, name);
+                        i.setClipData(android.content.ClipData.newRawUri(name, u));
+                        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        startActivity(Intent.createChooser(i, "Partager"));
+                    } catch (Throwable e) {
+                        Toast.makeText(this, "Partage impossible: " + e, Toast.LENGTH_LONG).show();
+                    }
+                }).show();
+    }
+
+    private Uri pendingVerif;
 
     private void shareReport() {
         shareBuilt("rapport-releve-" + today() + ".xlsx",
@@ -1529,6 +1587,20 @@ public class TableActivity extends Activity {
         super.onActivityResult(req, res, data);
         if (req == REQ_BKP || req == REQ_RST) {
             handleBackupResult(req, res, data);
+            return;
+        }
+        if (req == REQ_VERIF_SAVE) {
+            if (res == RESULT_OK && data != null && data.getData() != null && pendingVerif != null) {
+                try (java.io.InputStream in = getContentResolver().openInputStream(pendingVerif);
+                     OutputStream os = getContentResolver().openOutputStream(data.getData())) {
+                    byte[] buf = new byte[8192];
+                    int k;
+                    while ((k = in.read(buf)) > 0) os.write(buf, 0, k);
+                    Toast.makeText(this, "Rapport enregistr\u00E9", Toast.LENGTH_SHORT).show();
+                } catch (Exception e) {
+                    Toast.makeText(this, "Echec: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                }
+            }
             return;
         }
         if (req == REQ_VERIF) {
