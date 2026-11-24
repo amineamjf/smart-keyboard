@@ -40,7 +40,7 @@ final class SmartRvReport {
     private final ArrayList<String> xfs = new ArrayList<>();
     private final HashMap<String, Integer> xfIdx = new HashMap<>();
 
-    private SmartRvReport() {
+    SmartRvReport() {
         fonts.add("<font><sz val=\"10\"/><name val=\"Calibri\"/></font>");
         fills.add("<fill><patternFill patternType=\"none\"/></fill>");
         fills.add("<fill><patternFill patternType=\"gray125\"/></fill>");
@@ -56,7 +56,7 @@ final class SmartRvReport {
     }
 
     /** Style de cellule. fill/border/fmt peuvent etre null. h: left|center. */
-    private int st(String fill, boolean bold, boolean italic, boolean ul, int sz, String color, String h,
+    int st(String fill, boolean bold, boolean italic, boolean ul, int sz, String color, String h,
                    boolean wrap, String border, String fmt) {
         String key = fill + "|" + bold + "|" + italic + "|" + ul + "|" + sz + "|" + color + "|" + h + "|" + wrap + "|"
                 + border + "|" + fmt;
@@ -83,7 +83,7 @@ final class SmartRvReport {
         return xfs.size() - 1;
     }
 
-    private String stylesXml() {
+    String stylesXml() {
         StringBuilder b = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
                 + "<styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">"
                 + "<numFmts count=\"1\"><numFmt numFmtId=\"164\" formatCode=\"#,##0.##\"/></numFmts>");
@@ -101,7 +101,7 @@ final class SmartRvReport {
     }
 
     // ---------------------------------------------------------------- feuille
-    private static final class Sheet {
+    static final class Sheet {
         final TreeMap<Integer, TreeMap<Integer, Object[]>> cells = new TreeMap<>();
         final ArrayList<int[]> merges = new ArrayList<>();
         final HashMap<Integer, Double> rowH = new HashMap<>();
@@ -129,7 +129,7 @@ final class SmartRvReport {
         }
     }
 
-    private static String col(int i) {
+    static String col(int i) {
         StringBuilder s = new StringBuilder();
         i++;
         while (i > 0) {
@@ -140,7 +140,7 @@ final class SmartRvReport {
         return s.toString();
     }
 
-    private static String esc(String s) {
+    static String esc(String s) {
         StringBuilder b = new StringBuilder();
         for (int i = 0; i < s.length(); i++) {
             char ch = s.charAt(i);
@@ -179,7 +179,7 @@ final class SmartRvReport {
         }
     }
 
-    private static String sheetXml(Sheet sh, String viewXml, String tail, int lastRow, int lastCol) {
+    static String sheetXml(Sheet sh, String viewXml, String tail, int lastRow, int lastCol) {
         StringBuilder sb = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
                 + "<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" "
                 + "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">");
@@ -696,7 +696,7 @@ final class SmartRvReport {
         }
     }
 
-    private static String mergeXml(Sheet sh) {
+    static String mergeXml(Sheet sh) {
         StringBuilder b = new StringBuilder();
         for (int[] m : sh.merges) {
             b.append("<mergeCell ref=\"").append(col(m[1])).append(m[0] + 1).append(":").append(col(m[3])).append(m[2] + 1).append("\"/>");
@@ -704,26 +704,26 @@ final class SmartRvReport {
         return b.toString();
     }
 
-    private static void put(ZipOutputStream z, String name, String content) throws Exception {
+    static void put(ZipOutputStream z, String name, String content) throws Exception {
         z.putNextEntry(new ZipEntry(name));
         z.write(content.getBytes(StandardCharsets.UTF_8));
         z.closeEntry();
     }
 
     // ---------------------------------------------------------------- graphiques
-    private static final String NS = "xmlns:c=\"http://schemas.openxmlformats.org/drawingml/2006/chart\" "
+    static final String NS = "xmlns:c=\"http://schemas.openxmlformats.org/drawingml/2006/chart\" "
             + "xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" "
             + "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"";
-    private static final String TAIL = "<c:plotVisOnly val=\"1\"/><c:dispBlanksAs val=\"gap\"/></c:chart><c:spPr><a:solidFill>"
+    static final String TAIL = "<c:plotVisOnly val=\"1\"/><c:dispBlanksAs val=\"gap\"/></c:chart><c:spPr><a:solidFill>"
             + "<a:srgbClr val=\"FFFFFF\"/></a:solidFill><a:ln><a:solidFill><a:srgbClr val=\"BFC8D8\"/></a:solidFill></a:ln></c:spPr></c:chartSpace>";
 
-    private static String strCache(List<String> a) {
+    static String strCache(List<String> a) {
         StringBuilder b = new StringBuilder("<c:strCache><c:ptCount val=\"" + a.size() + "\"/>");
         for (int i = 0; i < a.size(); i++) b.append("<c:pt idx=\"").append(i).append("\"><c:v>").append(esc(a.get(i))).append("</c:v></c:pt>");
         return b.append("</c:strCache>").toString();
     }
 
-    private static String numCache(List<Long> a, String f) {
+    static String numCache(List<Long> a, String f) {
         StringBuilder b = new StringBuilder("<c:numCache><c:formatCode>" + (f == null ? "General" : f) + "</c:formatCode><c:ptCount val=\""
                 + a.size() + "\"/>");
         for (int i = 0; i < a.size(); i++) {
@@ -732,7 +732,7 @@ final class SmartRvReport {
         return b.append("</c:numCache>").toString();
     }
 
-    private static String title(String t) {
+    static String title(String t) {
         return "<c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz=\"1300\" b=\"1\"/></a:pPr><a:r>"
                 + "<a:rPr lang=\"fr-FR\" sz=\"1300\" b=\"1\"/><a:t>" + esc(t) + "</a:t></a:r></a:p></c:rich></c:tx>"
                 + "<c:overlay val=\"0\"/></c:title><c:autoTitleDeleted val=\"0\"/>";
@@ -785,7 +785,7 @@ final class SmartRvReport {
                 + TAIL;
     }
 
-    private static String anchor(int id, String rId, int row0, int cx, int cy, String name) {
+    static String anchor(int id, String rId, int row0, int cx, int cy, String name) {
         return "<xdr:oneCellAnchor><xdr:from><xdr:col>1</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>" + row0
                 + "</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:ext cx=\"" + cx + "\" cy=\"" + cy
                 + "\"/><xdr:graphicFrame macro=\"\"><xdr:nvGraphicFramePr><xdr:cNvPr id=\"" + id + "\" name=\"" + esc(name)

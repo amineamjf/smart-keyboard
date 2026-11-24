@@ -100,6 +100,33 @@ final class Smart {
         return rates;
     }
 
+    /** Serie brute de l'historique: paires {mois (0-11), index}, ordre des colonnes; vide si aucune colonne. */
+    static ArrayList<double[]> series(Meters.Row r) {
+        ArrayList<double[]> out = new ArrayList<>();
+        String[] h = Meters.HEADS;
+        String[] c = r == null ? null : r.cols;
+        if (h == null || c == null) return out;
+        int[] hc = histCols(h);
+        for (int q = 0; q + 1 < hc.length; q += 2) {
+            int i = hc[q];
+            if (i >= c.length || c[i] == null) continue;
+            String v = c[i].trim().replace(',', '.');
+            if (v.isEmpty()) continue;
+            try {
+                out.add(new double[]{hc[q + 1], Double.parseDouble(v)});
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return out;
+    }
+
+    /** Noms francais des mois (0-11). */
+    static String monthName(int m) {
+        String[] n = {"Janvier", "F\u00E9vrier", "Mars", "Avril", "Mai", "Juin", "Juillet", "Ao\u00FBt", "Septembre",
+                "Octobre", "Novembre", "D\u00E9cembre"};
+        return m >= 0 && m < 12 ? n[m] : "?";
+    }
+
     /** Index attendu comme SmartRV: ancien index + consommation habituelle; -1 si pas assez d'historique. */
     static long expected(Meters.Row r) {
         try {

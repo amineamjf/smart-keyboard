@@ -34,6 +34,7 @@ public class TableActivity extends Activity {
     private static final int REQ_RST = 20;
     private static final int REQ_LOG = 16;
     private static final int REQ_LOGF = 17;
+    private static final int REQ_VERIF = 22;
     private static final int F_ALL = 0, F_SENT = 1, F_ORANGE = 2, F_ERR = 3, F_NEW = 4, F_UNL = 5, F_OUT = 6, F_PHOTO = 7, F_HIGH = 8, F_NEG = 9, F_SKIP = 10;
 
     private final ArrayList<Meters.Row> shown = new ArrayList<>();
@@ -764,6 +765,25 @@ public class TableActivity extends Activity {
         shareBuilt("releve-sauvegarde-" + today() + ".zip", "application/zip", () -> Backup.build(TableActivity.this));
     }
 
+    private void pickVerif() {
+        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("*/*");
+        startActivityForResult(i, REQ_VERIF);
+    }
+
+    private void runVerif(final Uri uri) {
+        shareBuilt("verification-anomalies-" + today() + ".xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", () -> {
+                    java.util.ArrayList<String[]> pairs;
+                    try (java.io.InputStream in = getContentResolver().openInputStream(uri)) {
+                        pairs = AnomalyEngine.readInput(in);
+                    }
+                    if (pairs.isEmpty()) throw new Exception("aucune ligne (contrat, compteur) dans le fichier");
+                    return AnomalyReport.build(pairs);
+                });
+    }
+
     private void shareReport() {
         shareBuilt("rapport-releve-" + today() + ".xlsx",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1206,6 +1226,9 @@ public class TableActivity extends Activity {
         box.addView(toolRow(d, "\u21BB", "Retraiter les saut\u00E9s",
                 "Les remet \u00E0 \u00AB non vu \u00BB apr\u00E8s correction", this::requeueSkipped));
         box.addView(toolRow(d, "\uD83D\uDCC4", "Rapport CSV", "Format texte simple", this::exportCsv));
+        box.addView(sectionTitle("Anomalies"));
+        box.addView(toolRow(d, "\uD83D\uDD0D", "V\u00E9rification d'anomalies (.xlsx)",
+                "Fichier contrat + compteur : analyse, index attendu, tournée", this::pickVerif));
         box.addView(sectionTitle("Sauvegarde et partage"));
         box.addView(toolRow(d, "\uD83D\uDCBE", "Sauvegarder tout (.zip)",
                 "Tableau, lectures, \u00E0 r\u00E9aliser, r\u00E9glages", this::backupSave));
@@ -1506,6 +1529,10 @@ public class TableActivity extends Activity {
         super.onActivityResult(req, res, data);
         if (req == REQ_BKP || req == REQ_RST) {
             handleBackupResult(req, res, data);
+            return;
+        }
+        if (req == REQ_VERIF) {
+            if (res == RESULT_OK && data != null && data.getData() != null) runVerif(data.getData());
             return;
         }
         if (req == REQ_LOG || req == REQ_LOGF) {
