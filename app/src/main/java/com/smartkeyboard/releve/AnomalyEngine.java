@@ -243,35 +243,77 @@ final class AnomalyEngine {
         return t;
     }
 
-    /** Lit le fichier de l'utilisateur: deux colonnes (contrat, compteur), avec ou sans en-tete. */
+    /** Un numero plausible: sans espace, 4 a 25 caracteres, au moins 3 chiffres (rejette les titres et les textes). */
+    private static boolean plausibleId(String s) {
+        if (s == null) return false;
+        String t = s.trim();
+        if (t.length() < 4 || t.length() > 25) return false;
+        int digits = 0;
+        for (int i = 0; i < t.length(); i++) {
+            char c = t.charAt(i);
+            if (Character.isWhitespace(c)) return false;
+            if (Character.isDigit(c)) digits++;
+        }
+        return digits >= 3;
+    }
+
+    /** Dernier fichier lu: nombre de lignes ignorees et feuilles examinees (pour un message clair). */
+    static int lastSkipped;
+    static String lastSheets = "";
+
+    /**
+     * Lit le fichier de l'utilisateur. Cherche dans TOUTES les feuilles un en-tete avec « contrat » et « compteur »;
+     * sans en-tete, prend les deux premieres colonnes. Dans les deux cas, une ligne n'est gardee que si ses
+     * numeros sont plausibles (les titres, totaux et textes sont ignores et comptes).
+     */
     static ArrayList<String[]> readInput(java.io.InputStream in) throws Exception {
         List<List<String[]>> sheets = TableReader.read(in);
-        ArrayList<String[]> out = new ArrayList<>();
-        if (sheets.isEmpty()) return out;
-        List<String[]> rows = sheets.get(0);
-        int cC = 0, cM = 1, start = 0;
-        for (int i = 0; i < Math.min(5, rows.size()); i++) {
-            String[] h = rows.get(i);
-            int a = -1, b = -1;
-            for (int j = 0; j < h.length; j++) {
-                String n = Meters.norm(h[j] == null ? "" : h[j]);
-                if (a < 0 && (n.contains("CONTRAT") || n.contains("CLIENT"))) a = j;
-                else if (b < 0 && n.contains("COMPTEUR")) b = j;
-            }
-            if (a >= 0 && b >= 0) {
-                cC = a;
-                cM = b;
-                start = i + 1;
-                break;
+        lastSkipped = 0;
+        lastSheets = "";
+        // 1) une feuille avec en-tete contrat + compteur
+        for (int si = 0; si < sheets.size(); si++) {
+            List<String[]> rows = sheets.get(si);
+            for (int i = 0; i < Math.min(12, rows.size()); i++) {
+                String[] h = rows.get(i);
+                int a = -1, b = -1;
+                for (int j = 0; j < h.length; j++) {
+                    String n = Meters.norm(h[j] == null ? "" : h[j]);
+                    if (a < 0 && (n.contains("CONTRAT") || n.startsWith("N CLIENT") || n.equals("CLIENT"))) a = j;
+                    else if (b < 0 && n.contains("COMPTEUR") && !n.contains("ANCIEN")) b = j;
+                }
+                if (a >= 0 && b >= 0) {
+                    ArrayList<String[]> out = collect(rows, i + 1, a, b);
+                    if (!out.isEmpty()) return out;
+                }
             }
         }
+        // 2) sans en-tete: deux premieres colonnes de la premiere feuille qui donne des numeros plausibles
+        for (List<String[]> rows : sheets) {
+            ArrayList<String[]> out = collect(rows, 0, 0, 1);
+            if (!out.isEmpty()) return out;
+        }
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < sheets.size(); i++) sb.append(i == 0 ? "" : ", ").append(sheets.get(i).size()).append(" lignes");
+        lastSheets = sb.toString();
+        return new ArrayList<>();
+    }
+
+    private static ArrayList<String[]> collect(List<String[]> rows, int start, int cC, int cM) {
+        ArrayList<String[]> out = new ArrayList<>();
+        int skipped = 0;
         for (int i = start; i < rows.size(); i++) {
             String[] r = rows.get(i);
             String c = cC < r.length ? clean(r[cC]) : "";
             String m = cM < r.length ? clean(r[cM]) : "";
             if (c.isEmpty() && m.isEmpty()) continue;
+            boolean okC = c.isEmpty() || plausibleId(c), okM = m.isEmpty() || plausibleId(m);
+            if (!okC || !okM || (c.isEmpty() && m.isEmpty())) {
+                skipped++;
+                continue;
+            }
             out.add(new String[]{c, m});
         }
+        if (!out.isEmpty()) lastSkipped = skipped;
         return out;
     }
 }

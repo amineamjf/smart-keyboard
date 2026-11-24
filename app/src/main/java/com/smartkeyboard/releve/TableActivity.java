@@ -781,7 +781,10 @@ public class TableActivity extends Activity {
                 try (java.io.InputStream in = getContentResolver().openInputStream(uri)) {
                     pairs = AnomalyEngine.readInput(in);
                 }
-                if (pairs.isEmpty()) throw new Exception("aucune ligne (contrat, compteur) dans le fichier");
+                if (pairs.isEmpty()) {
+                    throw new Exception("colonnes \u00AB Contrat \u00BB et \u00AB N\u00B0 Compteur \u00BB introuvables dans ce fichier ("
+                            + AnomalyEngine.lastSheets + "). Choisissez un fichier avec deux colonnes: contrat et compteur.");
+                }
                 byte[] data = AnomalyReport.build(pairs);
                 final String name = "verification-anomalies-" + today() + ".xlsx";
                 java.io.File dir = new java.io.File(getCacheDir(), "share");
@@ -793,7 +796,8 @@ public class TableActivity extends Activity {
                 }
                 final Uri u = ShareProvider.uriFor(name);
                 final int n = pairs.size();
-                runOnUiThread(() -> askVerifResult(u, name, n));
+                final int sk = AnomalyEngine.lastSkipped;
+                runOnUiThread(() -> askVerifResult(u, name, n, sk));
             } catch (Throwable e) {
                 final String m = "Echec: " + e;
                 runOnUiThread(() -> Toast.makeText(TableActivity.this, m, Toast.LENGTH_LONG).show());
@@ -802,10 +806,11 @@ public class TableActivity extends Activity {
     }
 
     /** Rapport pret: l'utilisateur choisit (rien n'est envoye automatiquement). */
-    private void askVerifResult(final Uri u, final String name, int n) {
+    private void askVerifResult(final Uri u, final String name, int n, int skipped) {
         final String mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
         new AlertDialog.Builder(this).setTitle("Rapport pr\u00EAt")
-                .setMessage(n + " compteur(s) analys\u00E9(s).\n" + name)
+                .setMessage(n + " compteur(s) analys\u00E9(s)." + (skipped > 0 ? "\n" + skipped + " ligne(s) ignor\u00E9e(s) (titres ou valeurs non valides)." : "")
+                        + "\n" + name)
                 .setPositiveButton("Ouvrir", (dlg, w) -> {
                     try {
                         Intent i = new Intent(Intent.ACTION_VIEW);
