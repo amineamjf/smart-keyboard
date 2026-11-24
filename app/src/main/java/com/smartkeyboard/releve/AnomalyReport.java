@@ -142,40 +142,48 @@ final class AnomalyReport {
             r++;
         }
         int lastRow = Math.max(2, r - 1);
-        // ----------------------------------------------------------- tableau de bord
+        // ----------------------------------------------------------- tableau de bord (une colonne, adapte au telephone)
         SmartRvReport.Sheet d = new SmartRvReport.Sheet();
-        d.cols = new double[]{3, 22, 12, 3, 22, 12, 3, 22, 12, 3, 3};
+        d.cols = new double[]{2, 9.5, 9.5, 9.5, 9.5, 9.5, 9.5, 2};
         int bgS = x.st(BG, false, false, false, 10, "000000", null, false, null, null);
-        for (int rr = 0; rr < 62; rr++) for (int cc = 0; cc < 11; cc++) d.put(rr, cc, "", bgS);
-        d.span(0, 1, 8, "TABLEAU DE BORD — VÉRIFICATION DES ANOMALIES", x.st(NAVY, true, false, false, 14, "FFFFFF", "center", false, null, null));
-        for (int cc = 1; cc <= 8; cc++) d.put(1, cc, "", x.st(NAVY, true, false, false, 14, "FFFFFF", "center", false, null, null));
-        d.merges.add(new int[]{0, 1, 1, 8});
+        int T0 = 60;
+        int nv = 0;
+        for (String vd : VERDICTS) if (byVerdict.get(vd) > 0) nv++;
+        int nt = Math.min(12, byTour.size());
+        int endRow = T0 + 2 + nv + 3 + nt + 3;
+        for (int rr = 0; rr < endRow; rr++) for (int cc = 0; cc < 8; cc++) d.put(rr, cc, "", bgS);
+        int banner = x.st(NAVY, true, false, false, 14, "FFFFFF", "center", false, null, null);
+        d.span(0, 1, 6, "TABLEAU DE BORD \u2014 V\u00C9RIFICATION DES ANOMALIES", banner);
+        for (int cc = 1; cc <= 6; cc++) d.put(1, cc, "", banner);
+        d.merges.add(new int[]{0, 1, 1, 6});
         d.rowH.put(0, 18.0);
         d.rowH.put(1, 18.0);
-        d.span(2, 1, 8, "Relevé du " + new java.text.SimpleDateFormat("dd/MM/yyyy", Locale.FRANCE).format(new java.util.Date())
-                + "  ·  " + String.format(Locale.FRANCE, "%,d", Meters.ROWS.size()).replace(' ', ' ').replace(' ', ' ')
-                + " compteurs dans le tableau", x.st(BG, false, true, false, 10, "55637D", "center", false, null, null));
-        Object[][] cards = {{"À vérifier au total", (double) all.size(), "E3F5EB", "12703A", 1, 2},
-                {"Urgents", (double) urgent, "FDE3E3", "B3261E", 4, 5}, {"À revoir", (double) review, "FFF1D6", "8A5200", 7, 8}};
+        d.span(2, 1, 6, new java.text.SimpleDateFormat("dd/MM/yyyy", Locale.FRANCE).format(new java.util.Date())
+                + "  \u00B7  " + Meters.ROWS.size() + " compteurs dans le tableau",
+                x.st(BG, false, true, false, 10, "55637D", "center", false, null, null));
+        Object[][] cards = {{"\u00C0 v\u00E9rifier", (double) all.size(), "E3F5EB", "12703A", 1, 2},
+                {"Urgents", (double) urgent, "FDE3E3", "B3261E", 3, 4}, {"\u00C0 revoir", (double) review, "FFF1D6", "8A5200", 5, 6}};
         for (Object[] c : cards) {
             int c1 = (Integer) c[4], c2 = (Integer) c[5];
-            d.span(4, c1, c2, c[0], x.st((String) c[2], true, false, false, 10, (String) c[3], "center", false, null, null));
-            d.span(5, c1, c2, c[1], x.st((String) c[2], true, false, false, 26, (String) c[3], "center", false, null, "#,##0"));
-            d.put(6, c1, "", x.st((String) c[2], true, false, false, 26, (String) c[3], "center", false, null, "#,##0"));
-            d.put(6, c2, "", x.st((String) c[2], true, false, false, 26, (String) c[3], "center", false, null, "#,##0"));
+            int sl = x.st((String) c[2], true, false, false, 10, (String) c[3], "center", false, "FFFFFF", null);
+            int sv = x.st((String) c[2], true, false, false, 26, (String) c[3], "center", false, "FFFFFF", "#,##0");
+            d.span(4, c1, c2, c[0], sl);
+            d.span(5, c1, c2, c[1], sv);
+            d.put(6, c1, "", sv);
+            d.put(6, c2, "", sv);
             d.merges.add(new int[]{5, c1, 6, c2});
         }
         d.rowH.put(4, 20.0);
         d.rowH.put(5, 22.0);
         d.rowH.put(6, 22.0);
-        int T0 = 46;
-        d.span(T0, 1, 8, "Détail des données", x.st(BG, true, false, false, 11, NAVY, "left", false, null, null));
+        d.span(T0, 1, 6, "D\u00E9tail des donn\u00E9es", x.st(BG, true, false, false, 11, NAVY, "left", false, null, null));
         int th = x.st(BLUE, true, false, false, 10, "FFFFFF", "left", false, null, null);
         int thc = x.st(BLUE, true, false, false, 10, "FFFFFF", "center", false, null, null);
         int tc = x.st("FFFFFF", false, false, false, 10, "000000", "left", false, null, null);
         int tn = x.st("FFFFFF", false, false, false, 10, "000000", "center", false, null, "#,##0");
-        d.put(T0 + 1, 1, "Verdict", th);
-        d.put(T0 + 1, 2, "Nb", thc);
+        d.span(T0 + 1, 1, 4, "Verdict", th);
+        for (int cc = 2; cc <= 4; cc++) d.put(T0 + 1, cc, "", th);
+        d.put(T0 + 1, 5, "Nb", thc);
         ArrayList<String> vc = new ArrayList<>();
         ArrayList<Long> vv = new ArrayList<>();
         ArrayList<String> vcol = new ArrayList<>();
@@ -183,30 +191,34 @@ final class AnomalyReport {
         for (int i = 0; i < VERDICTS.length; i++) {
             int cnt = byVerdict.get(VERDICTS[i]);
             if (cnt == 0) continue;
-            d.put(row, 1, VERDICTS[i], tc);
-            d.put(row, 2, (double) cnt, tn);
+            d.span(row, 1, 4, VERDICTS[i], tc);
+            for (int cc = 2; cc <= 4; cc++) d.put(row, cc, "", tc);
+            d.put(row, 5, (double) cnt, tn);
             vc.add(VERDICTS[i]);
             vv.add((long) cnt);
             vcol.add(COL[i][2]);
             row++;
         }
         int vR1 = T0 + 3, vR2 = row; // 1-based
-        d.put(T0 + 1, 4, "Tournée", th);
-        d.put(T0 + 1, 5, "Nb", thc);
+        int T1 = row + 1;
+        d.span(T1, 1, 4, "Tourn\u00E9e", th);
+        for (int cc = 2; cc <= 4; cc++) d.put(T1, cc, "", th);
+        d.put(T1, 5, "Nb", thc);
         ArrayList<java.util.Map.Entry<String, Integer>> tl = new ArrayList<>(byTour.entrySet());
         Collections.sort(tl, (p, q) -> q.getValue() - p.getValue());
         ArrayList<String> tcats = new ArrayList<>();
         ArrayList<Long> tvals = new ArrayList<>();
-        int tr = T0 + 2;
-        for (int i = 0; i < Math.min(12, tl.size()); i++) {
-            d.put(tr, 4, tl.get(i).getKey(), tc);
+        int tr = T1 + 1;
+        for (int i = 0; i < nt; i++) {
+            d.span(tr, 1, 4, tl.get(i).getKey(), tc);
+            for (int cc = 2; cc <= 4; cc++) d.put(tr, cc, "", tc);
             d.put(tr, 5, (double) tl.get(i).getValue(), tn);
             tcats.add(tl.get(i).getKey());
             tvals.add((long) tl.get(i).getValue());
             tr++;
         }
-        int tR1 = T0 + 3, tR2 = tr;
-        int lastDash = Math.max(row, tr) + 2;
+        int tR1 = T1 + 2, tR2 = tr;
+        int lastDash = Math.max(endRow, tr + 2);
 
         String vtail = "<autoFilter ref=\"A2:" + col(n - 1) + lastRow + "\"/>"
                 + "<mergeCells count=\"" + v.merges.size() + "\">" + SmartRvReport.mergeXml(v) + "</mergeCells>"
@@ -218,8 +230,8 @@ final class AnomalyReport {
                 + "</dataValidation></dataValidations>"
                 + "<pageMargins left=\"0.4\" right=\"0.4\" top=\"0.6\" bottom=\"0.6\" header=\"0.3\" footer=\"0.3\"/>"
                 + "<pageSetup orientation=\"landscape\" fitToWidth=\"1\" fitToHeight=\"0\"/></worksheet>";
-        String vXml = SmartRvReport.sheetXml(v, "<sheetViews><sheetView showGridLines=\"0\" workbookViewId=\"0\"><pane xSplit=\"4\" ySplit=\"2\" "
-                + "topLeftCell=\"E3\" activePane=\"bottomRight\" state=\"frozen\"/></sheetView></sheetViews>", vtail, lastRow - 1 + 0, n - 1);
+        String vXml = SmartRvReport.sheetXml(v, "<sheetViews><sheetView showGridLines=\"0\" workbookViewId=\"0\"><pane xSplit=\"2\" ySplit=\"2\" "
+                + "topLeftCell=\"C3\" activePane=\"bottomRight\" state=\"frozen\"/></sheetView></sheetViews>", vtail, lastRow - 1 + 0, n - 1);
         String dtail = "<mergeCells count=\"" + d.merges.size() + "\">" + SmartRvReport.mergeXml(d) + "</mergeCells>"
                 + "<pageMargins left=\"0.5\" right=\"0.5\" top=\"0.5\" bottom=\"0.5\" header=\"0.3\" footer=\"0.3\"/>"
                 + "<pageSetup orientation=\"portrait\" fitToWidth=\"1\" fitToHeight=\"1\"/><drawing r:id=\"rIdAnDr\"/></worksheet>";
@@ -266,9 +278,9 @@ final class AnomalyReport {
         SmartRvReport.put(z, "xl/worksheets/sheet2.xml", vXml);
         SmartRvReport.put(z, "xl/drawings/drawingAn1.xml", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
                 + "<xdr:wsDr xmlns:xdr=\"http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing\" xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\">"
-                + anchorAt(2, "rId1", 1, 8, 2520000, 3300000, "Verdicts")
-                + anchorAt(3, "rId2", 4, 8, 3960000, 3300000, "Tournees")
-                + anchorAt(4, "rId3", 1, 25, 6480000, Math.max(2200000, 200000 * vc.size() + 900000), "Types")
+                + anchorTwo(2, "rId1", 8, 24, "Verdicts")
+                + anchorTwo(3, "rId2", 25, 41, "Tournees")
+                + anchorTwo(4, "rId3", 42, 58, "Types")
                 + "</xdr:wsDr>");
         SmartRvReport.put(z, "xl/drawings/_rels/drawingAn1.xml.rels", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
                 + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
@@ -276,12 +288,24 @@ final class AnomalyReport {
                 + "<Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart\" Target=\"../charts/chartAn2.xml\"/>"
                 + "<Relationship Id=\"rId3\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart\" Target=\"../charts/chartAn3.xml\"/>"
                 + "</Relationships>");
-        SmartRvReport.put(z, "xl/charts/chartAn1.xml", chart(true, false, "Répartition par verdict", "B", "C", vR1, vR2, vc, vv, vcol, null));
-        SmartRvReport.put(z, "xl/charts/chartAn2.xml", chart(false, false, "Anomalies par tournée", "E", "F", tR1, tR2, tcats, tvals, null, BLUE));
-        SmartRvReport.put(z, "xl/charts/chartAn3.xml", chart(false, true, "Type de problème", "B", "C", vR1, vR2, vc, vv, null, GREEN));
+        SmartRvReport.put(z, "xl/charts/chartAn1.xml", chart(true, false, "Répartition par verdict", "B", "F", vR1, vR2, vc, vv, vcol, null));
+        SmartRvReport.put(z, "xl/charts/chartAn2.xml", chart(false, false, "Anomalies par tournée", "B", "F", tR1, tR2, tcats, tvals, null, BLUE));
+        SmartRvReport.put(z, "xl/charts/chartAn3.xml", chart(false, true, "Type de problème", "B", "F", vR1, vR2, vc, vv, null, GREEN));
         z.finish();
         z.close();
         return bos.toByteArray();
+    }
+
+    /** Graphique ancre entre deux cellules (de la colonne B a G): suit la grille, jamais de chevauchement. */
+    private static String anchorTwo(int id, String rId, int row0, int row1, String name) {
+        return "<xdr:twoCellAnchor><xdr:from><xdr:col>1</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>" + row0
+                + "</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:to><xdr:col>7</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>"
+                + row1 + "</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to><xdr:graphicFrame macro=\"\"><xdr:nvGraphicFramePr><xdr:cNvPr id=\""
+                + id + "\" name=\"" + esc(name) + "\"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm><a:off x=\"0\" y=\"0\"/>"
+                + "<a:ext cx=\"0\" cy=\"0\"/></xdr:xfrm><a:graphic><a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/chart\">"
+                + "<c:chart xmlns:c=\"http://schemas.openxmlformats.org/drawingml/2006/chart\" "
+                + "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" r:id=\"" + rId
+                + "\"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor>";
     }
 
     private static String anchorAt(int id, String rId, int col0, int row0, int cx, int cy, String name) {

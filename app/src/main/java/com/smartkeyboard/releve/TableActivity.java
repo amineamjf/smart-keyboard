@@ -1235,70 +1235,184 @@ public class TableActivity extends Activity {
         return out;
     }
 
-    /** Feuille d'outils: importer le tableau, importer les lectures, exporter. */
+    /** Ecran d'outils: six categories (grosses pastilles), chacune ouvre une courte liste d'actions. */
     private void showTools() {
+        final android.app.Dialog d = new android.app.Dialog(this, android.R.style.Theme_DeviceDefault_Light_NoActionBar);
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(0xFFF3F5FA);
+        LinearLayout bar = new LinearLayout(this);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        bar.setBackgroundColor(0xFF12286B);
+        bar.setPadding(dp(6), dp(8), dp(6), dp(8));
+        FrameLayout back = new FrameLayout(this);
+        back.addView(new IconView(this, IconView.BACK, 0xFFFFFFFF), new FrameLayout.LayoutParams(dp(24), dp(24), android.view.Gravity.CENTER));
+        back.setOnClickListener(v -> d.dismiss());
+        bar.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        TextView ttl = label("Outils", 20, 0xFFFFFFFF, true);
+        bar.addView(ttl, new LinearLayout.LayoutParams(0, -2, 1f));
+        root.addView(bar, new LinearLayout.LayoutParams(-1, -2));
+        LinearLayout grid = new LinearLayout(this);
+        grid.setOrientation(LinearLayout.VERTICAL);
+        grid.setPadding(dp(14), dp(14), dp(14), dp(14));
+        String[] names = {"Importer", "Exporter", "Anomalies", "Voix", "Sauvegarde", "Partager"};
+        int[] icons = {IconView.DOWN, IconView.UP, IconView.SEARCH, IconView.MIC, IconView.SAVE, IconView.SHARE};
+        String[] subs = {"Tableau, journal", "Rapports Excel / CSV", "V\u00E9rifier, corriger", "Hors ligne, laboratoire",
+                "Sauvegarder, restaurer", "Gmail, Drive, WhatsApp"};
+        for (int i = 0; i < names.length; i += 2) {
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            for (int k = 0; k < 2; k++) {
+                final int idx = i + k;
+                LinearLayout t = new LinearLayout(this);
+                t.setOrientation(LinearLayout.VERTICAL);
+                t.setGravity(android.view.Gravity.CENTER);
+                t.setPadding(dp(8), dp(14), dp(8), dp(14));
+                t.setBackground(cardShape(0xFFFFFFFF, 0xFFE3E8F2, 20));
+                FrameLayout chip = new FrameLayout(this);
+                chip.setBackground(shape(0xFFE6EDFF, 18));
+                chip.addView(new IconView(this, icons[idx], 0xFF2457E6),
+                        new FrameLayout.LayoutParams(dp(28), dp(28), android.view.Gravity.CENTER));
+                t.addView(chip, new LinearLayout.LayoutParams(dp(52), dp(52)));
+                TextView n = label(names[idx], 16, 0xFF0B1B3F, true);
+                n.setGravity(android.view.Gravity.CENTER);
+                LinearLayout.LayoutParams np = new LinearLayout.LayoutParams(-1, -2);
+                np.topMargin = dp(8);
+                t.addView(n, np);
+                TextView st = label(subs[idx], 11, 0xFF5B6784, false);
+                st.setGravity(android.view.Gravity.CENTER);
+                t.addView(st, new LinearLayout.LayoutParams(-1, -2));
+                t.setOnClickListener(v -> showToolGroup(idx));
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(132), 1f);
+                lp.setMargins(dp(5), dp(5), dp(5), dp(5));
+                row.addView(t, lp);
+            }
+            grid.addView(row, new LinearLayout.LayoutParams(-1, -2));
+        }
+        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        sv.addView(grid);
+        root.addView(sv, new LinearLayout.LayoutParams(-1, 0, 1f));
+        d.setContentView(root);
+        d.show();
+    }
+
+    /** Ligne d'action compacte (icone + titre + precision). */
+    private View actionRow(final android.app.Dialog d, String icon, String title, String sub, final Runnable r) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(12), dp(10), dp(12), dp(10));
+        row.setBackground(cardShape(0xFFF8FAFD, 0xFFE6EAF2, 16));
+        FrameLayout chip = new FrameLayout(this);
+        chip.setBackground(shape(0xFFEAF0FF, 12));
+        chip.addView(new IconView(this, iconType(icon, title), 0xFF2457E6),
+                new FrameLayout.LayoutParams(dp(22), dp(22), android.view.Gravity.CENTER));
+        row.addView(chip, new LinearLayout.LayoutParams(dp(40), dp(40)));
+        LinearLayout txt = new LinearLayout(this);
+        txt.setOrientation(LinearLayout.VERTICAL);
+        txt.addView(label(title, 14, 0xFF0B1B3F, true));
+        TextView st = label(sub, 11, 0xFF5B6784, false);
+        txt.addView(st);
+        LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(0, -2, 1f);
+        tp.leftMargin = dp(12);
+        row.addView(txt, tp);
+        row.setOnClickListener(v -> {
+            d.dismiss();
+            r.run();
+        });
+        LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-1, -2);
+        rp.bottomMargin = dp(8);
+        row.setLayoutParams(rp);
+        return row;
+    }
+
+    private void showToolGroup(int g) {
         final android.app.Dialog d = new android.app.Dialog(this);
         d.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(16), dp(10), dp(16), dp(20));
-        box.setBackground(shape(0xFFFFFFFF, 22));
-        box.addView(sectionTitle("Tableau"));
-        box.addView(toolRow(d, "\uD83D\uDCCB", "Importer le tableau (Excel / CSV)",
-                "Remplace le tableau de la tourn\u00E9e", this::importTable));
-        box.addView(sectionTitle("Lectures de l'application"));
-        box.addView(toolRow(d, "\uD83D\uDCC2", "Dossier du journal (une seule fois)",
-                "Lecture automatique ensuite", this::pickLogDir));
-        box.addView(toolRow(d, "\uD83D\uDDD2", "Choisir des fichiers du journal (.txt)",
-                "Un ou plusieurs fichiers", this::pickLogFiles));
-        box.addView(toolRow(d, "\uD83C\uDF99", "Voix hors ligne (apprentissage)",
-                "Apprend votre voix, sans internet",
-                () -> startActivity(new Intent(this, VoiceTrainActivity.class))));
-        box.addView(toolRow(d, "\uD83C\uDFA4", "Laboratoire vocal Google (en ligne)",
-                "Test avec le service du t\u00E9l\u00E9phone",
-                () -> startActivity(new Intent(this, VoiceLabActivity.class))));
-        box.addView(toolRow(d, "\u2211", "Corriger les anciens index",
-                oldIndexFixes().size() + " \u00E0 corriger (d'apr\u00E8s la consommation)", this::fixOldIndexes));
-        box.addView(toolRow(d, "\u2699", "Correction automatique des anciens index : " + (autoOldOn() ? "OUI" : "NON"),
-                "D\u00E8s que le nouvel index est confirm\u00E9 par l'application", () -> {
-                    boolean nv = !autoOldOn();
-                    getSharedPreferences("cfg", MODE_PRIVATE).edit().putBoolean("autoOld", nv).apply();
-                    Toast.makeText(this, nv ? "Correction automatique activ\u00E9e" : "Correction automatique d\u00E9sactiv\u00E9e",
-                            Toast.LENGTH_SHORT).show();
-                    if (nv) {
-                        autoFixOld();
-                        reload();
-                    }
-                }));
-        box.addView(sectionTitle("Exporter"));
-        box.addView(toolRow(d, "\uD83D\uDCCA", "Rapport Excel (.xlsx)",
-                "Tous les compteurs avec statuts", this::exportXlsx));
-        box.addView(toolRow(d, "\uD83D\uDCE4", "Lectures de l'application (.xlsx)",
-                "Ce qui a \u00E9t\u00E9 lu dans l'application", this::exportClosed));
-        box.addView(toolRow(d, "\uD83D\uDCDE", "\u00C0 r\u00E9aliser (.xlsx)",
-                "Contrat, t\u00E9l\u00E9phone, adresse lus dans l'application", this::exportTodo));
-        box.addView(toolRow(d, "\u2709", "Non r\u00E9pertori\u00E9s (.xlsx)",
-                Meters.countOffApp() + " compteur(s) \u00E0 transmettre", this::exportUnl));
-        box.addView(toolRow(d, "\u26A0", "Saut\u00E9s par l'auto (.xlsx)",
-                ScanService.countSkipped() + " compteur(s) avec la raison", this::exportSkipped));
-        box.addView(toolRow(d, "\u21BB", "Retraiter les saut\u00E9s",
-                "Les remet \u00E0 \u00AB non vu \u00BB apr\u00E8s correction", this::requeueSkipped));
-        box.addView(toolRow(d, "\uD83D\uDCC4", "Rapport CSV", "Format texte simple", this::exportCsv));
-        box.addView(sectionTitle("Anomalies"));
-        box.addView(toolRow(d, "\uD83D\uDD0D", "V\u00E9rification d'anomalies (.xlsx)",
-                "Fichier contrat + compteur : analyse, index attendu, tournée", this::pickVerif));
-        box.addView(sectionTitle("Sauvegarde et partage"));
-        box.addView(toolRow(d, "\uD83D\uDCBE", "Sauvegarder tout (.zip)",
-                "Tableau, lectures, \u00E0 r\u00E9aliser, r\u00E9glages", this::backupSave));
-        box.addView(toolRow(d, "\u267B", "Restaurer une sauvegarde",
-                "Remet tout comme dans le fichier", this::backupRestoreAsk));
-        box.addView(toolRow(d, "\uD83D\uDCE8", "Partager la sauvegarde",
-                "Gmail, Drive, WhatsApp...", this::shareBackup));
-        box.addView(toolRow(d, "\uD83D\uDCE4", "Partager le rapport Excel",
-                "Gmail, Drive, WhatsApp...", this::shareReport));
-        android.widget.ScrollView sv = new android.widget.ScrollView(this);
-        sv.addView(groupTools(box));
-        d.setContentView(sv);
+        box.setPadding(dp(16), dp(10), dp(16), dp(14));
+        float rad = dp(26);
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setColor(0xFFFFFFFF);
+        bg.setCornerRadii(new float[]{rad, rad, rad, rad, 0, 0, 0, 0});
+        box.setBackground(bg);
+        View grip = new View(this);
+        grip.setBackground(shape(0xFFE2E8F0, 3));
+        LinearLayout.LayoutParams gl = new LinearLayout.LayoutParams(dp(42), dp(5));
+        gl.gravity = android.view.Gravity.CENTER_HORIZONTAL;
+        gl.bottomMargin = dp(8);
+        box.addView(grip, gl);
+        switch (g) {
+            case 0:
+                box.addView(label("Importer", 20, 0xFF0B1B3F, true));
+                box.addView(actionRow(d, "\uD83D\uDCCB", "Importer le tableau (Excel / CSV)",
+                        "Remplace le tableau de la tourn\u00E9e", this::importTable));
+                box.addView(actionRow(d, "\uD83D\uDCC2", "Dossier du journal",
+                        "Une seule fois, lecture automatique ensuite", this::pickLogDir));
+                box.addView(actionRow(d, "\uD83D\uDDD2", "Fichiers du journal (.txt)",
+                        "Un ou plusieurs fichiers", this::pickLogFiles));
+                break;
+            case 1:
+                box.addView(label("Exporter", 20, 0xFF0B1B3F, true));
+                box.addView(actionRow(d, "\uD83D\uDCCA", "Rapport Excel (.xlsx)",
+                        "Tous les compteurs avec statuts", this::exportXlsx));
+                box.addView(actionRow(d, "\uD83D\uDCE4", "Lectures de l'application",
+                        "Ce qui a \u00E9t\u00E9 lu dans l'application", this::exportClosed));
+                box.addView(actionRow(d, "\uD83D\uDCDE", "\u00C0 r\u00E9aliser",
+                        "Contrat, t\u00E9l\u00E9phone, adresse", this::exportTodo));
+                box.addView(actionRow(d, "\u2709", "Non r\u00E9pertori\u00E9s",
+                        Meters.countOffApp() + " compteur(s) \u00E0 transmettre", this::exportUnl));
+                box.addView(actionRow(d, "\u26A0", "Saut\u00E9s par l'auto",
+                        ScanService.countSkipped() + " compteur(s) avec la raison", this::exportSkipped));
+                box.addView(actionRow(d, "\uD83D\uDCC4", "Rapport CSV", "Format texte simple", this::exportCsv));
+                break;
+            case 2:
+                box.addView(label("Anomalies", 20, 0xFF0B1B3F, true));
+                box.addView(actionRow(d, "\uD83D\uDD0D", "V\u00E9rification d'anomalies",
+                        "Fichier contrat + compteur : analyse et index attendu", this::pickVerif));
+                box.addView(actionRow(d, "\u2211", "Corriger les anciens index",
+                        oldIndexFixes().size() + " \u00E0 corriger (d'apr\u00E8s la consommation)", this::fixOldIndexes));
+                box.addView(actionRow(d, "\u2699", "Correction automatique : " + (autoOldOn() ? "OUI" : "NON"),
+                        "D\u00E8s que le nouvel index est confirm\u00E9", () -> {
+                            boolean nv = !autoOldOn();
+                            getSharedPreferences("cfg", MODE_PRIVATE).edit().putBoolean("autoOld", nv).apply();
+                            Toast.makeText(this, nv ? "Correction automatique activ\u00E9e" : "Correction automatique d\u00E9sactiv\u00E9e",
+                                    Toast.LENGTH_SHORT).show();
+                            if (nv) {
+                                autoFixOld();
+                                reload();
+                            }
+                        }));
+                box.addView(actionRow(d, "\u21BB", "Retraiter les saut\u00E9s",
+                        "Les remet \u00E0 \u00AB non vu \u00BB apr\u00E8s correction", this::requeueSkipped));
+                break;
+            case 3:
+                box.addView(label("Voix", 20, 0xFF0B1B3F, true));
+                box.addView(actionRow(d, "\uD83C\uDF99", "Voix hors ligne",
+                        "Apprend votre voix, sans internet",
+                        () -> startActivity(new Intent(this, VoiceTrainActivity.class))));
+                box.addView(actionRow(d, "\uD83C\uDFA4", "Laboratoire vocal Google",
+                        "Test avec le service du t\u00E9l\u00E9phone (en ligne)",
+                        () -> startActivity(new Intent(this, VoiceLabActivity.class))));
+                break;
+            case 4:
+                box.addView(label("Sauvegarde", 20, 0xFF0B1B3F, true));
+                box.addView(actionRow(d, "\uD83D\uDCBE", "Sauvegarder tout (.zip)",
+                        "Tableau, lectures, \u00E0 r\u00E9aliser, r\u00E9glages", this::backupSave));
+                box.addView(actionRow(d, "\u267B", "Restaurer une sauvegarde",
+                        "Remet tout comme dans le fichier", this::backupRestoreAsk));
+                break;
+            default:
+                box.addView(label("Partager", 20, 0xFF0B1B3F, true));
+                box.addView(actionRow(d, "\uD83D\uDCE8", "Partager la sauvegarde",
+                        "Gmail, Drive, WhatsApp...", this::shareBackup));
+                box.addView(actionRow(d, "\uD83D\uDCE4", "Partager le rapport Excel",
+                        "Gmail, Drive, WhatsApp...", this::shareReport));
+                break;
+        }
+        d.setContentView(box);
         android.view.Window w = d.getWindow();
         if (w != null) {
             w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(0));
