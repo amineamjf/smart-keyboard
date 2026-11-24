@@ -150,7 +150,7 @@ public final class TableReader {
                 try {
                     rows = sheet(cleanXml(en.getValue()), sst);
                 } catch (Exception ex2) {
-                    if (first == null) first = ex2;
+                    if (first == null) first = new Exception(en.getKey().replace("xl/worksheets/", "") + ": " + ex2.getMessage());
                     continue; // une feuille illisible (ex. Analyse) ne bloque pas les autres
                 }
             }

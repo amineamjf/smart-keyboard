@@ -387,7 +387,7 @@ public class MainActivity extends Activity {
                         + (Meters.lastDup > 0 ? " (" + Meters.lastDup + " doublons ignores)" : "")
                         + "\n" + Meters.lastReport;
             } catch (Throwable e) {
-                msg = "Echec de l'import: " + e;
+                msg = "Echec de l'import: " + (e.getMessage() != null ? e.getMessage() : e.toString());
                 try {
                     java.io.StringWriter sw = new java.io.StringWriter();
                     e.printStackTrace(new java.io.PrintWriter(sw));
