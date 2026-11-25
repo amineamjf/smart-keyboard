@@ -136,7 +136,11 @@ final class FloatCards {
     }
 
     static String modeName(int m) {
-        return m == 1 ? "Ancien seul" : (m == 2 ? "Nouveau seul" : (m == 3 ? "Ancien + Nouveau" : "Ancien + Nouveau + Attendu"));
+        StringBuilder sb = new StringBuilder();
+        if ((m & 1) != 0) sb.append("Ancien");
+        if ((m & 2) != 0) sb.append(sb.length() > 0 ? " + " : "").append("Nouveau");
+        if ((m & 4) != 0) sb.append(sb.length() > 0 ? " + " : "").append("Estimation");
+        return sb.length() == 0 ? "Aucune" : sb.toString();
     }
 
     /** Bouton du bandeau, appui court. Retourne le nouvel etat. */
@@ -150,10 +154,13 @@ final class FloatCards {
         return on;
     }
 
-    /** Bouton du bandeau, appui long: Ancien + Nouveau -> Ancien seul -> Nouveau seul. */
+    /** Bouton du bandeau, appui long: toutes les combinaisons: A+N+E, A+N, A, N, E, A+E, N+E. */
     static int cycleMode(Context c) {
         int m = mode(c);
-        int nx = m == 7 ? 3 : (m == 3 ? 1 : (m == 1 ? 2 : 7));
+        // toutes les combinaisons possibles, chaque fenetre est independante des autres
+        int[] seq = {7, 3, 1, 2, 4, 5, 6};
+        int nx = seq[0];
+        for (int i = 0; i < seq.length; i++) if (seq[i] == m) nx = seq[(i + 1) % seq.length];
         try {
             prefs(c).edit().putInt(K_MODE, nx).putBoolean(K_ON, true).apply();
         } catch (Throwable ignored) {
@@ -229,7 +236,7 @@ final class FloatCards {
             lab.setLetterSpacing(0.06f);
             lab.setGravity(Gravity.CENTER);
             lab.setIncludeFontPadding(false);
-            lab.setText(i == OLD ? "old" : (i == NEW ? "new" : "exp"));
+            lab.setText(i == OLD ? "A" : (i == NEW ? "N" : "E"));
             lab.setPadding((int) (5 * d), (int) (1 * d), (int) (5 * d), (int) (1 * d));
             TextView val = new TextView(s);
             val.setTypeface(Typeface.create("sans-serif-condensed", Typeface.BOLD));
