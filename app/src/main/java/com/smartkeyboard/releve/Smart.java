@@ -66,6 +66,10 @@ final class Smart {
 
     /** Derniers mois de consommation (ordre chronologique), ou null si l'historique est insuffisant. */
     static ArrayList<Double> rates(Meters.Row r) {
+        return rates(r, minHist);
+    }
+
+    static ArrayList<Double> rates(Meters.Row r, int minH) {
         String[] h = Meters.HEADS;
         String[] c = r == null ? null : r.cols;
         if (h == null || c == null) return null;
@@ -96,7 +100,7 @@ final class Smart {
             rates.add(d / gap);
         }
         while (rates.size() > win) rates.remove(0);
-        if (rates.size() < minHist) return null;
+        if (rates.size() < minH) return null;
         return rates;
     }
 
@@ -136,6 +140,33 @@ final class Smart {
             double u = usual(r);
             if (u < 0) return -1;
             return Math.round(Double.parseDouble(s.replace(',', '.')) + u);
+        } catch (Throwable t) {
+            return -1;
+        }
+    }
+
+    /** Vrai si l'index attendu vient d'un seul mois d'historique (estimation faible). */
+    static boolean expectedWeak(Meters.Row r) {
+        try {
+            return r != null && usual(r) < 0 && rates(r, 1) != null;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /** Comme expected(), mais accepte un seul mois d'historique (affichage seulement, jamais pour les alertes). */
+    static long expectedLoose(Meters.Row r) {
+        long e = expected(r);
+        if (e >= 0) return e;
+        try {
+            if (r == null || r.oldIdx == null || r.oldIdx.trim().isEmpty()) return -1;
+            ArrayList<Double> rt = rates(r, 1);
+            if (rt == null) return -1;
+            ArrayList<Double> s = new ArrayList<>(rt);
+            Collections.sort(s);
+            int n = s.size();
+            double u = n % 2 == 1 ? s.get(n / 2) : (s.get(n / 2 - 1) + s.get(n / 2)) / 2;
+            return Math.round(Double.parseDouble(r.oldIdx.trim().replace(',', '.')) + u);
         } catch (Throwable t) {
             return -1;
         }

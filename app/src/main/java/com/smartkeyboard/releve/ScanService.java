@@ -5072,8 +5072,9 @@ public class ScanService extends AccessibilityService {
                 k.setOldFlag(oflag);
                 try {
                     boolean typed = r.newIdx != null && !r.newIdx.trim().isEmpty();
-                    long ex = (!typed && r.status != Meters.SENT) ? Smart.expected(r) : -1;
-                    FloatCards.updateExpected(ex >= 0 ? String.valueOf(ex) : "");
+                    long ex = (!typed && r.status != Meters.SENT) ? Smart.expectedLoose(r) : -1;
+                    FloatCards.updateExpected(ex >= 0 ? (Smart.expectedWeak(r) ? "~" : "") + ex
+                            : (typed || r.status == Meters.SENT ? "" : "?"));
                 } catch (Throwable ignored) {
                 }
                 k.setStripData(name, r.oldIdx, r.newIdx, r.status == Meters.SUSPECT, note);
