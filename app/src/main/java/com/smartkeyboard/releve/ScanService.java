@@ -981,6 +981,9 @@ public class ScanService extends AccessibilityService {
         handler.removeCallbacks(photoStep);
         handler.removeCallbacks(gotoStep);
         handler.removeCallbacks(followCheck);
+        handler.removeCallbacks(swipeChain);
+        handler.removeCallbacks(swipeCheck);
+        swipeLeft = 0;
         handler.removeCallbacks(syncStep);
         handler.removeCallbacks(todoStepR);
         if (todoPhase != 0) {

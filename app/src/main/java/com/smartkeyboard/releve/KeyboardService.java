@@ -794,7 +794,7 @@ public class KeyboardService extends InputMethodService {
         if (voice == null) voice = new VoiceInput(this);
         if (voice.isRunning()) {
             voice.cancel();
-            if (ScanService.instance != null && ScanService.instance.isBusyNow()) ScanService.instance.stopAll();
+            if (ScanService.instance != null) ScanService.instance.stopAll();
             flashStrip("\u23F9 Arr\u00EAt");
             return;
         }
