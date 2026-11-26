@@ -45,7 +45,7 @@ public class MainActivity extends Activity {
     private LinearLayout svcCard;
     private android.widget.ProgressBar heroBar;
     private TextView accVal, kbVal, tabVal, autoLine, logSub, logVal;
-    private TextView modeVal, photoVal, jumpVal, dropVal;
+    private TextView modeVal, photoVal, jumpVal, dropVal, ceilVal;
     private LinearLayout advBox;
 
     private int dp(int v) {
@@ -396,6 +396,8 @@ public class MainActivity extends Activity {
         c4.addView(row("\u2728", "Alertes intelligentes", subText("Seuil propre \u00E0 chaque compteur, d'apr\u00E8s son historique"),
                 tv("\u203A", 22, GRAY, false), this::askSmart));
         c4.addView(row("\u2197", "Seuil fixe (facultatif)", subText("auto = seuil propre \u00E0 chaque compteur"), jumpVal, () -> askLimit(true)));
+        ceilVal = valueChip("", this::askCeiling);
+        c4.addView(row("\u26D4", "Plafond d'arr\u00EAt", subText("Au-del\u00E0 l'automatisation s'arr\u00EAte; en dessous, tout est envoy\u00E9 et signal\u00E9 dans le tableau"), ceilVal, this::askCeiling));
         c4.addView(row("\u2198", "Baisse maximale", subText("Au-del\u00E0: \u00E0 valider \u00E0 la main"), dropVal, () -> askLimit(false)));
         c4.addView(row("\uD83D\uDCF7", "Si photo demand\u00E9e", subText("Toucher pour changer"), photoVal, () -> {
             ScanService.photoMode = (ScanService.photoMode + 1) % 3;
@@ -749,6 +751,25 @@ public class MainActivity extends Activity {
         return e;
     }
 
+    private void askCeiling() {
+        final EditText et = new EditText(this);
+        et.setInputType(InputType.TYPE_CLASS_NUMBER);
+        et.setText(String.valueOf(ScanService.ceiling));
+        new AlertDialog.Builder(this)
+                .setTitle("Plafond d'arr\u00EAt (hausse en m3, 0 = ancien comportement)")
+                .setView(et)
+                .setPositiveButton("OK", (d, w) -> {
+                    try {
+                        ScanService.ceiling = Math.max(0, Long.parseLong(et.getText().toString().trim()));
+                        ScanService.saveCfg(this);
+                    } catch (Exception ignored) {
+                    }
+                    refresh();
+                })
+                .setNegativeButton("Annuler", null)
+                .show();
+    }
+
     private void askLimit(final boolean up) {
         final EditText et = new EditText(this);
         et.setInputType(InputType.TYPE_CLASS_NUMBER);
@@ -913,6 +934,7 @@ public class MainActivity extends Activity {
         photoVal.setText(pm[ScanService.photoMode]);
         jumpVal.setText(ScanService.maxJump > 0 ? "+" + ScanService.maxJump + " m\u00B3" : "auto");
         dropVal.setText("\u2212" + ScanService.maxDrop + " m\u00B3");
+        ceilVal.setText(ScanService.ceiling > 0 ? "+" + ScanService.ceiling + " m\u00B3" : "aucun");
 
         int[] c = Meters.counts();
         int orange = c[Meters.EXTRA] + c[Meters.NODATA] + c[Meters.PHOTO]

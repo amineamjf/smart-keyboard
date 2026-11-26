@@ -3508,6 +3508,9 @@ public class ScanService extends AccessibilityService {
     public static final String SKIP_TAG = "SAUTE AUTO: ";
     public static int photoMode = 0;       // 0 = photo auto, 1 = sauter, 2 = arreter
     public static long maxJump = 0;        // seuil FIXE facultatif (0 = desactive): le seuil intelligent par compteur est la regle
+    /** Plafond d'arret (m3): au-dela d'une hausse de ce montant l'automatisation s'arrete sur le compteur;
+     *  en dessous, tout est envoye et seulement signale dans le tableau. 0 = ancien comportement (sauter les hausses fortes). */
+    public static long ceiling = 60;
     public static long maxDrop = 10;       // baisse maximale acceptee (ancien - nouvel)
 
     /** Vrai si le nouvel index est hors de la plage [ancien - maxDrop, ancien + maxJump]. */
@@ -3588,6 +3591,7 @@ public class ScanService extends AccessibilityService {
             Meters.loadClosed(new java.io.File(c.getFilesDir(), "closed.tsv"));
             maxJump = sp.getLong("maxJump3", 0);
             maxDrop = sp.getLong("maxDrop", 10);
+            ceiling = sp.getLong("ceiling60", 60);
             Smart.factorX10 = sp.getInt("smartX", 20);
             Smart.minRise = sp.getLong("smartMin8", 8);
             Smart.on = sp.getBoolean("smartOn", true);
@@ -3650,7 +3654,7 @@ public class ScanService extends AccessibilityService {
     public static void saveCfg(android.content.Context c) {
         c.getSharedPreferences("cfg", android.content.Context.MODE_PRIVATE).edit()
                 .putInt("photoMode", photoMode).putLong("maxJump3", maxJump)
-                .putLong("maxDrop", maxDrop).putInt("smartX", Smart.factorX10)
+                .putLong("maxDrop", maxDrop).putLong("ceiling60", ceiling).putInt("smartX", Smart.factorX10)
                 .putLong("smartMin8", Smart.minRise).putBoolean("skipHigh", skipHigh)
                 .putBoolean("smartOn", Smart.on).putInt("smartWin", Smart.win).putInt("smartHist", Smart.minHist)
                 .putString("skipAnoms", skipAnomsString()).apply();
@@ -3879,7 +3883,30 @@ public class ScanService extends AccessibilityService {
             return;
         }
         aMark(status, status == Meters.ERROR ? SKIP_TAG + msg : msg);
+        if (status == Meters.ERROR && autoRunning && !aSingle && aFailRun < 3 && skippable(msg)) {
+            // un compteur en echec ne doit pas arreter toute la passe: on le signale et on passe au suivant
+            aFailRun++;
+            log("[" + aId + "] echec ignore (" + aFailRun + "/3 de suite), on passe au suivant");
+            try {
+                AccessibilityNodeInfo r = getRootInActiveWindow();
+                if (r == null || findId(r, "modelInputIdx", 0) == null) {
+                    performGlobalAction(GLOBAL_ACTION_BACK);
+                }
+            } catch (Exception ignored) {
+            }
+            aRetries = 0;
+            aGo(A_CLEAR, 900);
+            return;
+        }
         autoStop(msg);
+    }
+
+    /** Echecs d'un seul compteur (saisie/annotation), sans risque pour la suite. Les flux de cloture restent bloquants. */
+    private boolean skippable(String msg) {
+        return msg.contains("Annotation introuvable") || msg.contains("la liste Annotation")
+                || msg.contains("choix non confirme") || msg.contains("champ index")
+                || msg.contains("pas vide") || msg.contains("clavier pas pret")
+                || msg.contains("envoi refuse") || msg.contains("champ=");
     }
 
     private void aSwipe() {
@@ -3934,7 +3961,11 @@ public class ScanService extends AccessibilityService {
 
     // --- Lecture du compteur affiche et decision ---
 
+    private String aReview = "";
+    private int aFailRun = 0;
+
     private void aRead(AccessibilityNodeInfo root, boolean inApp, long now) {
+        aReview = "";
         String id = "";
         if (inApp && findId(root, "modelInputIdx", 0) != null) id = readMeterId(root);
         if (id.isEmpty()) {
@@ -4026,7 +4057,18 @@ public class ScanService extends AccessibilityService {
         if (r.oldIdx.matches("\\d{1,9}")) {
             long o = Long.parseLong(r.oldIdx);
             long n = Long.parseLong(val);
-            if (!aForce && skipHigh && outOfRange(r, o, n)) {
+            long diff = n - o;
+            if (!aForce && ceiling > 0 && diff > ceiling) {
+                // plafond fixe par l'utilisateur: on s'arrete SUR ce compteur (rien n'est ignore)
+                aMark(Meters.SUSPECT, "STOP plafond: hausse +" + diff + " m3 (plafond " + ceiling + ")");
+                autoStop("STOP: hausse +" + diff + " m3 au-dessus du plafond " + ceiling + " (" + id + ")");
+                return;
+            }
+            if (!aForce && ceiling > 0 && outOfRange(r, o, n)) {
+                // sous le plafond: on envoie quand meme, et on le signale dans le tableau pour verification
+                aReview = (diff >= 0 ? "hausse +" : "baisse ") + diff + " m3 (" + Smart.describe(r) + ")";
+                log("[" + id + "] hors limites mais sous le plafond: envoye, a verifier (" + aReview + ")");
+            } else if (!aForce && ceiling <= 0 && skipHigh && outOfRange(r, o, n)) {
                 aMark(Meters.SUSPECT, SKIP_TAG + "ecart " + (n >= o ? "+" : "") + (n - o) + " hors limites ("
                         + Smart.describe(r) + " / -" + maxDrop + "), a confirmer");
                 aSwipe();
@@ -4276,7 +4318,9 @@ public class ScanService extends AccessibilityService {
         if (aPhase == A_EN_WAIT && msg.startsWith("FIN OK")) {
             aSent++;
             if (aRow != null && aValue != null && !aValue.isEmpty()) aRow.newIdx = aValue;
-            aMark(Meters.SENT, msg);
+            aFailRun = 0;
+            aMark(Meters.SENT, aReview.isEmpty() ? msg : msg + " | A VERIFIER: " + aReview);
+            aReview = "";
             if (aSingle) {
                 autoStop("FIN: compteur suivant atteint");
                 return;
